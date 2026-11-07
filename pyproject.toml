@@ -1,0 +1,37 @@
+[build-system]
+requires = []
+build-backend = "build_wheel"
+backend-path = ["."]
+
+[project]
+name = "tldw-client"
+version = "0.2.0"
+description = "Dependency-free tldw.sh asynchronous analysis client"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+keywords = ["tldw", "video", "analysis", "agents", "mcp", "api"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://tldw.sh"
+Documentation = "https://tldw.sh/docs"
+Source = "https://github.com/tldwdotsh/tldw-python"
+Issues = "https://github.com/tldwdotsh/tldw-python/issues"
+
+[tool.ruff]
+target-version = "py310"
+
+

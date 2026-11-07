@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "name": "tldw-python",
+  "version": "0.2.0",
+  "exported_at": "2026-11-07T06:40:29.840868+00:00",
+  "repository": "https://github.com/tldwdotsh/tldw-python",
+  "repository_private": true,
+  "canonical_repository": "https://github.com/tldwdotsh/tldw",
+  "canonical_directory": "packages/agent-client-python",
+  "canonical_source_commit": "744d8bc98d5b15d24dd902bf34e3904351416d1d",
+  "canonical_source_kind": "reviewed_working_tree_snapshot",
+  "canonical_source_snapshot_sha256": "632f75d305268f1dcaf29ac43fb12ebf93c21a2e7bf8209ccedf99dd5697fbca",
+  "canonical_files": {
+    "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
+    "README.md": "5cb70ed860da52b25962b0b2171f04cc3aba24b8ae65fb79650808558b259ae9",
+    "build_wheel.py": "cbeb86e3b697e29e5a3560e9f60c8bf00ad9435d36d0dd4ec08dedad2cfbc6fd",
+    "pyproject.toml": "55ba54cee250bde1e7b7ee298220b686272aa13d40cdc4bd72f9db866b68846f",
+    "tests/test_client.py": "57e1acb676532ca45fa9bf311aced7e2b32da60e3cec9ac8c282f291ad5cd673",
+    "tests/test_packaging.py": "33df3c11c6aa66c532b1018e48a6bc09633f88ac23b49be71735ea1fd67adf76",
+    "tests/test_spending.py": "e2c87a6ba94b1c9f18ea71b57255800c8ad1d73f9936262fd9be07f5e631eb26",
+    "tests/test_transport.py": "3b40be28c733ad9f9053f4dcc07c82129a1f746517cfb9339f11776ba38e07b9",
+    "tldw_client/__init__.py": "92c2053c1794e877152a07426520932c58b7faf86b7910229ed33512da5aab76"
+  },
+  "export_snapshot_sha256": "b3265285e842d5b06eeccd316d68d12e05722c222727d02f999dc5fec3b8491e",
+  "export_files": {
+    ".github/workflows/validate.yml": "589aa76e63451ed833c1496f7a46fbdf9dca3bf627ee5d03aa030df1f460c65c",
+    ".gitignore": "2682bd7572b68987632de8f3e52a5993dc1f5732e87d64c6582bd7a8b0184b7f",
+    "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
+    "README.md": "76c0b130671cd96ccf84de5f5be6e4d00c7a9bf2de1d733f6a0436ee754236da",
+    "build_wheel.py": "d5fbb4fe4f50e3c5cc0f463c64f049f01cc0f7d7fbc92f3a8b1d9db366fa724a",
+    "pyproject.toml": "b3e86ba1c9f44c719c49aecf7cccb71b3905acec15bcffe10aca74af9bb3d1f4",
+    "tests/test_client.py": "57e1acb676532ca45fa9bf311aced7e2b32da60e3cec9ac8c282f291ad5cd673",
+    "tests/test_packaging.py": "7a378639b82a9abcfa6997ca4bfc00355ca1a952f004b7390f4a6f69aaf54ef1",
+    "tests/test_spending.py": "e2c87a6ba94b1c9f18ea71b57255800c8ad1d73f9936262fd9be07f5e631eb26",
+    "tests/test_transport.py": "3b40be28c733ad9f9053f4dcc07c82129a1f746517cfb9339f11776ba38e07b9",
+    "tldw_client/__init__.py": "92c2053c1794e877152a07426520932c58b7faf86b7910229ed33512da5aab76"
+  },
+  "hash_definition": "SHA-256 of UTF-8 canonical JSON mapping relative POSIX filenames to file SHA-256, sorted keys, separators comma/colon. Export excludes this manifest, .git, dependencies, caches and build outputs.",
+  "local_validation": {
+    "python_versions_tested": [
+      "3.12.15",
+      "3.15.0"
+    ],
+    "unit_tests_passed": 22,
+    "clean_wheel_install_passed": true,
+    "deterministic_sdist_wheel_roundtrip_passed": true
+  },
+  "local_artifacts": {
+    "tldw_client-0.2.0-py3-none-any.whl": {
+      "sha256": "cf2342b5ba975d7126da1dbfab7db5db2032060310d69b2cfdd857229a5522ce",
+      "bytes": 11317
+    },
+    "tldw_client-0.2.0.tar.gz": {
+      "sha256": "bcbe8029166c0a817d91b67ab3f1d1b78a9463f3498532bf307c7da55840d917",
+      "bytes": 16441
+    }
+  },
+  "registry_published": false,
+  "automatic_registry_publication": false,
+  "source_of_truth": "monorepo until an independent release and synchronization policy is explicitly adopted"
+}
