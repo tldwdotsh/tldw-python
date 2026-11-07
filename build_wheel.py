@@ -109,7 +109,8 @@ def build_sdist(sdist_directory, config_settings=None):
     filename = f"{NAME}-{VERSION}.tar.gz"
     with (
         (destination / filename).open("wb") as raw,
-        gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as compressed,
+        # Match the reviewed release format across Python's changing gzip default.
+        gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, compresslevel=9) as compressed,
         tarfile.open(
             fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT
         ) as archive,

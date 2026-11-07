@@ -1,5 +1,6 @@
 import base64
 import csv
+import gzip
 import hashlib
 import io
 import sys
@@ -8,12 +9,28 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from build_wheel import build_sdist, build_wheel
 
 
 class PackagingTests(unittest.TestCase):
+    def test_sdist_is_stable_when_python_changes_its_gzip_default(self):
+        original = gzip.GzipFile
+        artifacts = []
+        with tempfile.TemporaryDirectory() as directory:
+            for level in (9, 6):
+
+                def library_default(*args, _level=level, **kwargs):
+                    kwargs.setdefault("compresslevel", _level)
+                    return original(*args, **kwargs)
+
+                with mock.patch.object(gzip, "GzipFile", side_effect=library_default):
+                    path = Path(directory) / build_sdist(directory)
+                artifacts.append(hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(artifacts[0], artifacts[1])
+
     def test_sdist_is_deterministic_and_rebuilds_the_same_wheel(self):
         import importlib.util
 

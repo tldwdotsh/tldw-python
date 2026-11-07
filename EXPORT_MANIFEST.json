@@ -2,35 +2,35 @@
   "schema_version": 1,
   "name": "tldw-python",
   "version": "0.2.0",
-  "exported_at": "2026-11-07T06:40:29.840868+00:00",
+  "exported_at": "2026-11-07T06:59:11.868626+00:00",
   "repository": "https://github.com/tldwdotsh/tldw-python",
   "repository_private": true,
   "canonical_repository": "https://github.com/tldwdotsh/tldw",
   "canonical_directory": "packages/agent-client-python",
-  "canonical_source_commit": "744d8bc98d5b15d24dd902bf34e3904351416d1d",
-  "canonical_source_kind": "reviewed_working_tree_snapshot",
-  "canonical_source_snapshot_sha256": "632f75d305268f1dcaf29ac43fb12ebf93c21a2e7bf8209ccedf99dd5697fbca",
+  "canonical_source_commit": "620304c056e550f21cdf1c46c1b815c79343edf2",
+  "canonical_source_kind": "git_commit",
+  "canonical_source_snapshot_sha256": "688dee8581b6b41051259004189286ffdb9ae871e0a1aa562516c2c6aceef340",
   "canonical_files": {
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
     "README.md": "5cb70ed860da52b25962b0b2171f04cc3aba24b8ae65fb79650808558b259ae9",
-    "build_wheel.py": "cbeb86e3b697e29e5a3560e9f60c8bf00ad9435d36d0dd4ec08dedad2cfbc6fd",
+    "build_wheel.py": "a56fec23aa120b0bb454213fee8769e6e7cddaee7b9734d67efe73938f74d3ab",
     "pyproject.toml": "55ba54cee250bde1e7b7ee298220b686272aa13d40cdc4bd72f9db866b68846f",
     "tests/test_client.py": "57e1acb676532ca45fa9bf311aced7e2b32da60e3cec9ac8c282f291ad5cd673",
-    "tests/test_packaging.py": "33df3c11c6aa66c532b1018e48a6bc09633f88ac23b49be71735ea1fd67adf76",
+    "tests/test_packaging.py": "09dd00bbcf8894096823d4d4cbf8a5bde668b473c57edc6291ef990f5cb40230",
     "tests/test_spending.py": "e2c87a6ba94b1c9f18ea71b57255800c8ad1d73f9936262fd9be07f5e631eb26",
     "tests/test_transport.py": "3b40be28c733ad9f9053f4dcc07c82129a1f746517cfb9339f11776ba38e07b9",
     "tldw_client/__init__.py": "92c2053c1794e877152a07426520932c58b7faf86b7910229ed33512da5aab76"
   },
-  "export_snapshot_sha256": "b3265285e842d5b06eeccd316d68d12e05722c222727d02f999dc5fec3b8491e",
+  "export_snapshot_sha256": "2c565fe3240b27fe6d0e24691a4d035758c166b7421cbae9b22683bce47987e9",
   "export_files": {
     ".github/workflows/validate.yml": "589aa76e63451ed833c1496f7a46fbdf9dca3bf627ee5d03aa030df1f460c65c",
     ".gitignore": "2682bd7572b68987632de8f3e52a5993dc1f5732e87d64c6582bd7a8b0184b7f",
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
     "README.md": "76c0b130671cd96ccf84de5f5be6e4d00c7a9bf2de1d733f6a0436ee754236da",
-    "build_wheel.py": "d5fbb4fe4f50e3c5cc0f463c64f049f01cc0f7d7fbc92f3a8b1d9db366fa724a",
+    "build_wheel.py": "0907170b3fb4574d5b30943598451b693818e4d75a63395e7f33569adc6e1d09",
     "pyproject.toml": "b3e86ba1c9f44c719c49aecf7cccb71b3905acec15bcffe10aca74af9bb3d1f4",
     "tests/test_client.py": "57e1acb676532ca45fa9bf311aced7e2b32da60e3cec9ac8c282f291ad5cd673",
-    "tests/test_packaging.py": "7a378639b82a9abcfa6997ca4bfc00355ca1a952f004b7390f4a6f69aaf54ef1",
+    "tests/test_packaging.py": "f7ff9479aea6efe11e2b8425f7daaf0f0b037b48e0446316fa08e296f8e265f0",
     "tests/test_spending.py": "e2c87a6ba94b1c9f18ea71b57255800c8ad1d73f9936262fd9be07f5e631eb26",
     "tests/test_transport.py": "3b40be28c733ad9f9053f4dcc07c82129a1f746517cfb9339f11776ba38e07b9",
     "tldw_client/__init__.py": "92c2053c1794e877152a07426520932c58b7faf86b7910229ed33512da5aab76"
@@ -41,9 +41,11 @@
       "3.12.15",
       "3.15.0"
     ],
-    "unit_tests_passed": 22,
+    "unit_tests_passed": 23,
     "clean_wheel_install_passed": true,
-    "deterministic_sdist_wheel_roundtrip_passed": true
+    "deterministic_sdist_wheel_roundtrip_passed": true,
+    "cross_python_archive_bytes_identical": true,
+    "gzip_compression_level": 9
   },
   "local_artifacts": {
     "tldw_client-0.2.0-py3-none-any.whl": {
@@ -51,8 +53,8 @@
       "bytes": 11317
     },
     "tldw_client-0.2.0.tar.gz": {
-      "sha256": "bcbe8029166c0a817d91b67ab3f1d1b78a9463f3498532bf307c7da55840d917",
-      "bytes": 16441
+      "sha256": "1575d9a9eb834d61e1ccd1cde844637afe377a9706f9f97fbd09af3234a35dda",
+      "bytes": 16678
     }
   },
   "registry_published": false,
