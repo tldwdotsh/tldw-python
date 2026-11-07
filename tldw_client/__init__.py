@@ -23,7 +23,7 @@ __all__ = [
     "TldwJobError",
     "TldwTimeoutError",
 ]
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 _MAX_BODY = 8 * 1024 * 1024
 _TRANSIENT = {429, 502, 503, 504}
 
@@ -35,10 +35,6 @@ def _spending_options(transcription=None, max_credits=None, force_asr=None):
         raise ValueError("force_asr must be a boolean.")
     if force_asr and transcription != "if_needed":
         raise ValueError("force_asr requires explicit transcription=if_needed.")
-    if transcription == "if_needed" and max_credits is None:
-        raise ValueError(
-            "transcription=if_needed requires an explicit max_credits ceiling."
-        )
     result = {}
     if transcription is not None:
         result["transcription"] = transcription

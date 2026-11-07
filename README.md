@@ -4,7 +4,7 @@ A synchronous Python 3.10+ client with no runtime dependencies. Install the
 versioned wheel from your deployment's `/agents` page:
 
 ```sh
-python -m pip install /path/to/tldw_client-0.2.0-py3-none-any.whl
+python -m pip install /path/to/tldw_client-0.2.1-py3-none-any.whl
 ```
 
 The intended PyPI distribution name is `tldw-client`, imported as `tldw_client`.
@@ -72,6 +72,15 @@ Anonymous mode requires explicit loopback development access:
 `TldwClient(api_url="http://localhost:8000", allow_anonymous=True)`. It grants no
 admin access. Production uses HTTPS and a scoped key.
 
+For maintainers, `python build_wheel.py dist` creates the wheel offline using
+only the standard library. The PEP 517 backend supports both source distributions
+and wheels with no build dependencies. A standard build frontend can run
+`python -m build` to build the source archive and rebuild its wheel in isolation.
+Run `python -m unittest discover -s tests` from this source directory to check
+transport, polling, billing-safe retries and packaging. Publication preparation
+and registry account requirements are documented in the monorepo's release guide;
+no registry publication is implied by a successful local build.
+
 ## Standalone development and release preparation
 
 This private repository is an exported snapshot of
@@ -109,7 +118,7 @@ commands above; do not silently diverge or overwrite independent edits.
 
 Captions, text and existing cached transcripts cost **1 credit per source minute**.
 Fresh audio transcription costs **3 credits per source minute** and requires an
-eligible paid plan plus explicit `transcription: "if_needed"` (Python:
+eligible paid plan or server-confirmed billing exemption, plus explicit `transcription: "if_needed"` (Python:
 `transcription="if_needed"`). The default `never` fails with a clear error when
 new transcription would be necessary. Supplying `forceAsr: true` /
 `force_asr=True` also requires that explicit permission.
@@ -117,7 +126,7 @@ new transcription would be necessary. Supplying `forceAsr: true` /
 Use `maxCredits: "30.00"` in JavaScript or `max_credits="30.00"` in Python to cap
 a job. The server validates affordability before new transcription. The cap is
 positive, at most 1,000,000 credits, and has at most two decimal places. It is
-required whenever `transcription` is `if_needed`. Preserve
+required for ordinary paid accounts when `transcription` is `if_needed`. Preserve
 these controls in the same idempotent request body on retries. Jobs expose
 `credits.estimated`, `reserved`, `final`, the billing class/rate and real source
 duration; polling does not create another processing charge.
@@ -129,6 +138,9 @@ Source minutes round up to 0.1 minute with a 0.5-minute minimum before the rate
 multiplier. Raw text uses estimated reading minutes.
 
 Free includes 500 credits per month for captions/text, Hobby costs USD20/month
-with 1,000 credits, and Pro costs USD100/month with 5,000 credits. Included
+with 1,000 credits, and Pro costs USD99/month with 5,000 credits. Included
 allowance is used first, then purchased credits, which do not expire. Reading
 account usage does not buy credits or change plans.
+
+
+Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `MAX_CREDITS_EXCEEDED` (HTTP 422). Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
