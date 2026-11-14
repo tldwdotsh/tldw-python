@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from http.client import BadStatusLine
 from pathlib import Path
 from threading import Event
 from urllib.error import URLError
@@ -35,6 +36,63 @@ def job(status="queued", **extra):
 
 
 class ClientTests(unittest.TestCase):
+    def test_transcript_is_a_separate_owned_read_with_both_source_representations(self):
+        for timed in (True, False):
+            source = {
+                "transcript_id": JOB,
+                "language": "en",
+                "source": "platform_auto",
+                "timed": timed,
+                "segments": [{"start_ms": 0, "end_ms": 1000, "text": "Hello."}]
+                if timed
+                else [],
+                "blocks": []
+                if timed
+                else [
+                    {
+                        "id": "caption-1",
+                        "label": "Video captions",
+                        "text": "Hello.",
+                        "start_s": 0,
+                        "end_s": 1,
+                    }
+                ],
+                "text": None if timed else "Hello.",
+            }
+
+            def transport(method, url, headers, body, timeout, source=source):
+                self.assertEqual(method, "GET")
+                self.assertEqual(
+                    url, f"https://api.example.test/v1/summaries/{SUMMARY}/transcript"
+                )
+                self.assertEqual(headers["Authorization"], "Bearer " + TOKEN)
+                return response(source)
+
+            self.assertEqual(self.client(transport).get_transcript(SUMMARY), source)
+
+    def test_transcript_rejects_url_ids_and_invalid_success_payloads(self):
+        calls = []
+
+        def transport(*args):
+            calls.append(args)
+            return response({"transcript_id": JOB})
+
+        client = self.client(transport)
+        with self.assertRaises(ValueError):
+            client.get_transcript("https://evil.invalid/steal")
+        self.assertEqual(calls, [])
+        with self.assertRaises(TldwError) as caught:
+            client.get_transcript(SUMMARY)
+        self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
+
+    def test_transcript_forbidden_response_is_not_returned_as_source(self):
+        client = self.client(
+            lambda *args: response({"error": {"code": "TOKEN_SCOPE_REQUIRED"}}, 403)
+        )
+        with self.assertRaises(TldwError) as caught:
+            client.get_transcript(SUMMARY)
+        self.assertEqual(caught.exception.code, "TOKEN_SCOPE_REQUIRED")
+
     def client(self, transport, **options):
         self.now = 0
 
@@ -126,6 +184,27 @@ class ClientTests(unittest.TestCase):
             client.submit_analysis("source", idempotency_key="resume-me")
         self.assertEqual(caught.exception.idempotency_key, "resume-me")
         self.assertNotIn("private transport", str(caught.exception))
+
+    def test_custom_transport_cannot_succeed_after_deadline(self):
+        def transport(*args):
+            self.now += 2
+            return response({"job_id": JOB, "job": job()}, 202)
+
+        client = self.client(transport, request_timeout_seconds=1)
+        with self.assertRaises(TldwTimeoutError) as caught:
+            client.submit_analysis("source", idempotency_key="late-reply")
+        self.assertEqual(caught.exception.idempotency_key, "late-reply")
+
+    def test_custom_transport_protocol_failure_keeps_comparison_key(self):
+        def transport(*args):
+            raise BadStatusLine("private protocol debug text")
+
+        client = self.client(transport)
+        with self.assertRaises(TldwError) as caught:
+            client.compare_tiktoks(["clip-a", "clip-b"])
+        self.assertEqual(caught.exception.code, "NETWORK_ERROR")
+        self.assertTrue(caught.exception.idempotency_key)
+        self.assertNotIn("private protocol", str(caught.exception))
 
     def test_rate_limit_honors_deadline_and_retains_key(self):
         client = self.client(
@@ -310,6 +389,66 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(TldwError) as caught:
                 client.get_usage()
             self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
+
+    def test_api_error_details_are_redacted_and_give_the_active_job(self):
+        active = "00000000-0000-4000-8000-000000000199"
+
+        def transport(*_):
+            return response(
+                {
+                    "error": {
+                        "code": "DUPLICATE_ACTIVE_JOB",
+                        "message": "That video is already processing.",
+                        "details": {"job_id": active, "note": f"seen {TOKEN}"},
+                    }
+                },
+                409,
+            )
+
+        with self.assertRaises(TldwError) as caught:
+            self.client(transport).submit_analysis("A complete source")
+        self.assertEqual(caught.exception.code, "DUPLICATE_ACTIVE_JOB")
+        self.assertEqual(caught.exception.job_id, active)
+        self.assertEqual(
+            caught.exception.details, {"job_id": active, "note": "seen [REDACTED]"}
+        )
+
+    def test_one_slow_poll_does_not_end_a_longer_wait(self):
+        calls = []
+
+        def transport(method, url, headers, payload, timeout):
+            calls.append(method)
+            if len(calls) == 1:
+                self.now += timeout
+                raise TimeoutError()
+            return response(job("completed"))
+
+        client = self.client(transport, request_timeout_seconds=1)
+        self.assertEqual(
+            client.wait_for_job(JOB, timeout_seconds=600)["status"], "completed"
+        )
+        self.assertGreaterEqual(len(calls), 2)
+
+    def test_a_slow_submission_is_not_retried_and_says_how_to_retry(self):
+        def transport(*_):
+            raise TimeoutError()
+
+        with self.assertRaises(TldwTimeoutError) as caught:
+            self.client(transport).submit_analysis("A complete source")
+        self.assertIn("same idempotency key", str(caught.exception))
+
+    def test_a_malformed_accepted_comparison_is_an_invalid_response(self):
+        def transport(*_):
+            return response({"comparison": {"id": "../../admin"}}, 202)
+
+        with self.assertRaises(TldwError) as caught:
+            self.client(transport).compare_tiktoks(
+                [
+                    "https://www.tiktok.com/@a/video/7000000000000000001",
+                    "https://www.tiktok.com/@b/video/7000000000000000002",
+                ]
+            )
+        self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
 
 
 if __name__ == "__main__":

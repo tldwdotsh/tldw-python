@@ -1,13 +1,16 @@
 import json
 import sys
 import threading
+import time
 import unittest
+import uuid
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tldw_client import TldwClient, TldwError
+from tldw_client import TldwClient, TldwError, TldwTimeoutError
 
 JOB = "00000000-0000-4000-8000-000000000101"
 SUMMARY = "00000000-0000-4000-8000-000000000102"
@@ -64,6 +67,59 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"id": SUMMARY, "content": {"answer": "Verified over HTTP"}})
 
 
+@contextmanager
+def scripted_server(respond):
+    """Run a real HTTP transport fixture and stop all fixture threads on exit."""
+    stop = threading.Event()
+    finished = threading.Event()
+    calls = []
+
+    class ScriptedHandler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            self.respond()
+
+        def do_POST(self):
+            self.respond()
+
+        def respond(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            calls.append((dict(self.headers), body))
+            try:
+                respond(self, stop)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                finished.set()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ScriptedHandler)
+    # server_close waits for request workers too; no fixture thread outlives us.
+    server.daemon_threads = False
+    thread = threading.Thread(
+        target=lambda: server.serve_forever(poll_interval=0.01), daemon=True
+    )
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", calls
+    finally:
+        stop.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        assert not calls or finished.is_set()
+
+
+def drip(handler, stop, data):
+    for byte in data:
+        handler.wfile.write(bytes([byte]))
+        handler.wfile.flush()
+        if stop.wait(0.025):
+            break
+
+
 class TransportTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -111,6 +167,95 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 302)
         self.assertEqual(len(Handler.calls), 1)
         self.assertEqual(Handler.calls[0][1], "/v1/me")
+
+
+class DeadlineTransportTests(unittest.TestCase):
+    def assert_times_out(self, respond, *, wait=False):
+        with scripted_server(respond) as (origin, _):
+            client = TldwClient(
+                api_url=origin, token=TOKEN, request_timeout_seconds=0.15
+            )
+            started = time.monotonic()
+            with self.assertRaises(TldwTimeoutError) as caught:
+                if wait:
+                    client.wait_for_job(JOB, timeout_seconds=0.1)
+                else:
+                    client.get_usage()
+            elapsed = time.monotonic() - started
+            self.assertLess(elapsed, 0.5)
+            if wait:
+                self.assertEqual(caught.exception.job_id, JOB)
+
+    def test_dripping_response_headers_obey_total_request_deadline(self):
+        def respond(handler, stop):
+            drip(
+                handler,
+                stop,
+                b'HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{"ok":true}',
+            )
+
+        self.assert_times_out(respond)
+
+    def test_dripping_response_body_obeys_request_and_wait_deadlines(self):
+        def respond(handler, stop):
+            body = json.dumps(
+                {
+                    "id": JOB,
+                    "status": "completed",
+                    "progress": 100,
+                    "summary_id": SUMMARY,
+                }
+            ).encode()
+            handler.send_response(200)
+            handler.send_header("Content-Length", str(len(body)))
+            handler.end_headers()
+            drip(handler, stop, body)
+
+        self.assert_times_out(respond)
+        self.assert_times_out(respond, wait=True)
+
+    def test_dripping_chunk_framing_obeys_total_request_deadline(self):
+        def respond(handler, stop):
+            handler.send_response(200)
+            handler.send_header("Transfer-Encoding", "chunked")
+            handler.end_headers()
+            # No body bytes arrive while the chunk-extension line is dripped.
+            drip(handler, stop, b'b;extension=slow\r\n{"ok":true}\r\n0\r\n\r\n')
+
+        self.assert_times_out(respond)
+
+    def test_headers_and_body_share_one_deadline(self):
+        def respond(handler, stop):
+            if stop.wait(0.1):
+                return
+            handler.send_response(200)
+            handler.send_header("Content-Length", "11")
+            handler.end_headers()
+            if not stop.wait(0.1):
+                handler.wfile.write(b'{"ok":true}')
+
+        self.assert_times_out(respond)
+
+    def test_broken_chunked_acceptance_keeps_generated_key_across_retries(self):
+        def respond(handler, stop):
+            handler.send_response(202)
+            handler.send_header("Transfer-Encoding", "chunked")
+            handler.end_headers()
+            handler.wfile.write(b'20\r\n{"job_id":')
+            handler.close_connection = True
+
+        with scripted_server(respond) as (origin, calls):
+            client = TldwClient(api_url=origin, token=TOKEN, _sleep=lambda _: None)
+            with self.assertRaises(TldwError) as caught:
+                client.submit_analysis("source retained verbatim")
+            self.assertEqual(caught.exception.code, "NETWORK_ERROR")
+            stable_key = caught.exception.idempotency_key
+            self.assertEqual(str(uuid.UUID(stable_key)), stable_key)
+            self.assertEqual(len(calls), 4)
+            self.assertTrue(
+                all(headers["Idempotency-Key"] == stable_key for headers, _ in calls)
+            )
+            self.assertEqual(len({body for _, body in calls}), 1)
 
 
 if __name__ == "__main__":
