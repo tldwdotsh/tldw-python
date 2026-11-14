@@ -1,63 +1,63 @@
 {
   "schema_version": 1,
   "name": "tldw-python",
-  "version": "0.2.5",
-  "exported_at": "2026-11-14T04:19:56.196334+00:00",
+  "version": "0.2.6",
+  "exported_at": "2026-11-14T04:30:37.276768+00:00",
   "repository": "https://github.com/tldwdotsh/tldw-python",
   "repository_private": true,
   "canonical_repository": "https://github.com/tldwdotsh/tldw",
   "canonical_directory": "packages/agent-client-python",
-  "canonical_source_commit": "e449631700807a7972fc630b027755c05a044ed1",
+  "canonical_source_commit": "bbae9068c981573e8a391b17b57c16d8663ce81a",
   "canonical_source_kind": "verified_canonical_commit",
-  "canonical_source_snapshot_sha256": "dd27d54e6abee2caa0e3a24708596bc176f135e8272744fb1a8b8b3727f929cf",
+  "canonical_source_snapshot_sha256": "6e3553ad96f159557f66dfb4128e106356b5b9d009000f3b00290ebf862883f6",
   "canonical_files": {
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
-    "README.md": "49e7ed016446eac209a520ba71d2ebaea9c9c6f1221f48693bda43dc38f22b1a",
-    "build_wheel.py": "99471fba02ba88e60fd934310a1b83dc440c0264cde03c20d84d37a89fdb8328",
-    "pyproject.toml": "451cd808c9450fc589725fa0632cc59ceb5b42188014e340004a188f44718a0d",
+    "README.md": "dee4dc397b5ad0affe80c5a2266d966f678bb4b57f215a3d7073f2c683040adc",
+    "build_wheel.py": "518d1b1516f0ac6b6e08f358410a791d6521b8e2ada76bc6611c3858f508153e",
+    "pyproject.toml": "7817d88373b38e32b159b379f964fbf22a39df65be82f9c99c96af1a712823e2",
     "tests/test_client.py": "148c68b1400126f433fa3191f2048a70cf01cd539151f9b6257b8c8741f0f82a",
-    "tests/test_packaging.py": "0cbe0b52376b5f358ed50dd9c7204939a8ee516ae2d160ebbfaa821a754e38a1",
+    "tests/test_packaging.py": "4de25537ab4791f81d23f6940e28727e476eddfc53d0f723fc73546bfe7a46ad",
     "tests/test_source_refresh.py": "833a4182c025f11a9d7a884933f191221d842f9afbee781965196fa280ef0f80",
     "tests/test_spending.py": "bfe9d6bdd60a2342f3e3f8cf7efe4adda6a48e67104fbfdafb11ceda68f7e26f",
-    "tests/test_transcript_catalog.py": "cafaecf62770d100b5f12505036017c2c1d09cf4271d5b446b6b73687902127c",
+    "tests/test_transcript_catalog.py": "d46845a2badfbc2bbf2fdee7642e7e40e14cb3f0b712bd86e858bea317e42df8",
     "tests/test_transcript_extraction.py": "7e40088cd7d235087d2e13385c33fee7aa9aed9b9932fdcd309135996c928b70",
     "tests/test_transport.py": "5890f7c0177953e33cac33fb2fc22013bcc5de15a417a93addce49cc4de416b8",
-    "tldw_client/__init__.py": "53e8e0dee2422c88c23db095258f47242c167440df068c6249867af2fbfd2acb"
+    "tldw_client/__init__.py": "a34945c7c2508d71a37f82633cf4de9e6c82a45354d9c2e2a4717791b06c9fe1"
   },
-  "export_snapshot_sha256": "930a160dedf65390d9f68d66cf56fef318f2ab4eaa3ee1579a80e504dfefa09a",
+  "export_snapshot_sha256": "8cd9bb354e8f553bdc1ebde46010e0555a16b751b2b7a1738d4ac9703dccc3ae",
   "export_files": {
     ".github/workflows/validate.yml": "1a3a8c0baf9b793d382e7bedad18470699283bf09dabb7ba44702c8d01a00849",
     ".gitignore": "2682bd7572b68987632de8f3e52a5993dc1f5732e87d64c6582bd7a8b0184b7f",
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
-    "README.md": "d46ba4a742fd11ff25115c074f8282f50f6003fa056480ef2991f61c8881f03c",
-    "build_wheel.py": "066a04fc1c36c7c5530de691d6380e553a58227bc5d4c5545cafa894abad1448",
-    "pyproject.toml": "87bcd9879fa8c94df6b20c5f4b5df7b6b2edd056b59d87db0fcf993f48465eb5",
+    "README.md": "eee89af90ef273752b7dcbcd02642738cdc1ec56aa9b736ea589b702275f25fb",
+    "build_wheel.py": "55fcfeed389efea8bd378a1fadef136e5fd3c68b331d5911be106d02d8efcc14",
+    "pyproject.toml": "be98dc475b0529f86e256debb8965ee529bb012ac9cd0012161ced0df92b7984",
     "tests/test_client.py": "148c68b1400126f433fa3191f2048a70cf01cd539151f9b6257b8c8741f0f82a",
-    "tests/test_packaging.py": "4ae1c708959041fcfa539d4f8c66f53a3b90397b00e829756210106d9c7ddb6d",
+    "tests/test_packaging.py": "8d09419de8ad31544eb3759844ffc454ca9b57ebfb677a7ce667ca1e4a7e65e4",
     "tests/test_source_refresh.py": "833a4182c025f11a9d7a884933f191221d842f9afbee781965196fa280ef0f80",
     "tests/test_spending.py": "bfe9d6bdd60a2342f3e3f8cf7efe4adda6a48e67104fbfdafb11ceda68f7e26f",
-    "tests/test_transcript_catalog.py": "cafaecf62770d100b5f12505036017c2c1d09cf4271d5b446b6b73687902127c",
+    "tests/test_transcript_catalog.py": "d46845a2badfbc2bbf2fdee7642e7e40e14cb3f0b712bd86e858bea317e42df8",
     "tests/test_transcript_extraction.py": "7e40088cd7d235087d2e13385c33fee7aa9aed9b9932fdcd309135996c928b70",
     "tests/test_transport.py": "5890f7c0177953e33cac33fb2fc22013bcc5de15a417a93addce49cc4de416b8",
-    "tldw_client/__init__.py": "53e8e0dee2422c88c23db095258f47242c167440df068c6249867af2fbfd2acb"
+    "tldw_client/__init__.py": "a34945c7c2508d71a37f82633cf4de9e6c82a45354d9c2e2a4717791b06c9fe1"
   },
   "hash_definition": "SHA-256 of UTF-8 canonical JSON mapping relative POSIX filenames to file SHA-256, sorted keys, separators comma/colon. Export excludes this manifest, .git, dependencies, caches and build outputs.",
   "local_validation": {
     "tests_are_offline_fixture_only": true,
-    "unit_tests_passed": 50,
+    "unit_tests_passed": 52,
     "standalone_wheel_sdist_build_passed": true,
     "gzip_compression_level": 9,
     "deterministic_sdist_wheel_roundtrip_passed": true,
     "canonical_commit_pending_root_verification": false
   },
   "local_artifacts": {
-    "tldw_client-0.2.5-py3-none-any.whl": {
-      "sha256": "2249f4b3193f20e4a0ebe4c87fbb9c8382f71bbea0a9593f2d2ec397d5a1486e",
-      "bytes": 17261
+    "tldw_client-0.2.6-py3-none-any.whl": {
+      "sha256": "2f58c2863b9655df2ebbaff3bedc6f4ed2d0ad829aefa70cf65f043b3771d2d5",
+      "bytes": 17419
     },
-    "tldw_client-0.2.5.tar.gz": {
-      "sha256": "202b63b8e2787bac67b6f65f33fbd3709e3af2bf98837ad4ec117c5a1b0d7d50",
-      "bytes": 27059
+    "tldw_client-0.2.6.tar.gz": {
+      "sha256": "b82f7511fd0bcf0b66442d23b6d7de34307cb1ce49b6e3b4a1b53f74566fb0f6",
+      "bytes": 27459
     }
   },
   "registry_published": false,

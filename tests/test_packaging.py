@@ -43,9 +43,9 @@ class PackagingTests(unittest.TestCase):
             with tarfile.open(path, "r:gz") as archive:
                 names = archive.getnames()
                 self.assertTrue(
-                    all(name.startswith("tldw_client-0.2.5/") for name in names)
+                    all(name.startswith("tldw_client-0.2.6/") for name in names)
                 )
-                self.assertIn("tldw_client-0.2.5/PKG-INFO", names)
+                self.assertIn("tldw_client-0.2.6/PKG-INFO", names)
                 self.assertFalse(
                     any("__pycache__" in name or ".env" in name for name in names)
                 )
@@ -56,7 +56,7 @@ class PackagingTests(unittest.TestCase):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.extractfile(member).read())
             spec = importlib.util.spec_from_file_location(
-                "rebuilt", root / "tldw_client-0.2.5/build_wheel.py"
+                "rebuilt", root / "tldw_client-0.2.6/build_wheel.py"
             )
             rebuilt = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(rebuilt)
@@ -70,7 +70,7 @@ class PackagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / build_wheel(directory)
             with zipfile.ZipFile(path) as archive:
-                metadata = archive.read("tldw_client-0.2.5.dist-info/METADATA").decode()
+                metadata = archive.read("tldw_client-0.2.6.dist-info/METADATA").decode()
                 self.assertIn("License-Expression: MIT", metadata)
                 self.assertIn(
                     "Project-URL: Source, https://github.com/tldwdotsh/tldw-python",
@@ -97,7 +97,7 @@ class PackagingTests(unittest.TestCase):
                 records = list(
                     csv.reader(
                         io.StringIO(
-                            archive.read("tldw_client-0.2.5.dist-info/RECORD").decode()
+                            archive.read("tldw_client-0.2.6.dist-info/RECORD").decode()
                         )
                     )
                 )

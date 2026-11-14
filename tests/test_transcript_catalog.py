@@ -31,6 +31,8 @@ class TranscriptCatalogTests(unittest.TestCase):
                     "unread": not data["read"],
                     "read_at": "2026-01-10T12:00:00Z" if data["read"] else None,
                 }
+            elif parsed.path.endswith("/metadata"):
+                value = {"id": TRANSCRIPT, "video": {"id": TRANSCRIPT}, "unread": True}
             elif parsed.path == "/v1/transcripts":
                 value = {"items": [{"id": TRANSCRIPT}], "next_cursor": "next+cursor/=="}
             else:
@@ -99,4 +101,35 @@ class TranscriptCatalogTests(unittest.TestCase):
             sdk.mark_transcript_read(TRANSCRIPT, "true")
         with self.assertRaises(ValueError):
             sdk.get_saved_transcript("not-an-id")
+        with self.assertRaises(ValueError):
+            sdk.get_saved_transcript_metadata("not-an-id")
         self.assertEqual(calls, [])
+
+    def test_metadata_lookup_never_fetches_text_or_marks_read(self):
+        calls = []
+        result = self.client(calls).get_saved_transcript_metadata(TRANSCRIPT)
+        self.assertEqual(result["id"], TRANSCRIPT)
+        self.assertTrue(result["unread"])
+        self.assertNotIn("segments", result)
+        self.assertEqual(
+            [(method, parsed.path) for method, parsed, _ in calls],
+            [("GET", f"/v1/transcripts/{TRANSCRIPT}/metadata")],
+        )
+
+    def test_metadata_lookup_rejects_mismatched_source_response(self):
+        sdk = TldwClient(
+            api_url="https://api.example.test",
+            token="fixture",
+            transport=lambda *args: (
+                200,
+                {},
+                json.dumps(
+                    {"id": "other", "video": {"id": TRANSCRIPT}, "unread": True}
+                ).encode(),
+            ),
+        )
+        from tldw_client import TldwError
+
+        with self.assertRaises(TldwError) as raised:
+            sdk.get_saved_transcript_metadata(TRANSCRIPT)
+        self.assertEqual(raised.exception.code, "INVALID_RESPONSE")

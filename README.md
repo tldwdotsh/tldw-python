@@ -11,10 +11,10 @@ Download it, verify it against the SHA-256 checksum shown on that page, then
 install the verified local file:
 
 ```sh
-curl -fsSLo tldw_client-0.2.5-py3-none-any.whl \
-  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.5-py3-none-any.whl' &&
-  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.5-py3-none-any.whl' | shasum -a 256 -c - &&
-  python -m pip install ./tldw_client-0.2.5-py3-none-any.whl
+curl -fsSLo tldw_client-0.2.6-py3-none-any.whl \
+  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.6-py3-none-any.whl' &&
+  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.6-py3-none-any.whl' | shasum -a 256 -c - &&
+  python -m pip install ./tldw_client-0.2.6-py3-none-any.whl
 ```
 
 The package is imported as `tldw_client`. Only `tldw-client` on PyPI and your
@@ -197,6 +197,9 @@ Pass `cursor=page["next_cursor"]` with the same filters for older entries. `sinc
 is inclusive and `until` exclusive, using ISO 8601 timestamps against
 `last_requested_at`. `read=False` marks a source unread again. Reading source
 content through REST/MCP/SDK never implicitly changes its read state.
+Use `get_saved_transcript_metadata(id)` to read one source’s title, dates and
+unread status directly, including sources outside the current catalog page. This
+GET does not load the transcript body or start a processing job.
 
 X posts, X video captions and articles reuse an owned source snapshot for 24 hours.
 Use `submit_analysis(..., refresh_source=True)` to retrieve current source content.

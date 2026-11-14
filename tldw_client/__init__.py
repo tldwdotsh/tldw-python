@@ -34,7 +34,7 @@ __all__ = [
     "TldwJobError",
     "TldwTimeoutError",
 ]
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 _MAX_BODY = 8 * 1024 * 1024
 _TRANSIENT = {429, 502, 503, 504}
 
@@ -901,6 +901,25 @@ class TldwClient:
             "GET", f"/v1/transcripts/{transcript_id}", cancel_event=cancel_event
         )
         return self._transcript(data)
+
+    def get_saved_transcript_metadata(self, transcript_id, *, cancel_event=None):
+        """Read source metadata by id without loading text, processing or marking read."""
+        transcript_id = _identifier(transcript_id)
+        data, _ = self._request(
+            "GET",
+            f"/v1/transcripts/{transcript_id}/metadata",
+            cancel_event=cancel_event,
+        )
+        if (
+            data.get("id") != transcript_id
+            or not isinstance(data.get("unread"), bool)
+            or not isinstance(data.get("video"), dict)
+            or not isinstance(data["video"].get("id"), str)
+        ):
+            raise TldwError(
+                "API returned invalid transcript metadata.", code="INVALID_RESPONSE"
+            )
+        return data
 
     def get_saved_transcript_page(
         self, transcript_id, *, offset=0, limit=100, cancel_event=None
