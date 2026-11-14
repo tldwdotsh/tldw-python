@@ -34,7 +34,7 @@ __all__ = [
     "TldwJobError",
     "TldwTimeoutError",
 ]
-__version__ = "0.2.7"
+__version__ = "0.2.8"
 _MAX_BODY = 8 * 1024 * 1024
 _TRANSIENT = {429, 502, 503, 504}
 
@@ -624,9 +624,8 @@ class TldwClient:
 
     def submit_transcript(
         self,
-        media=None,
+        media,
         *,
-        upload_id=None,
         preferred_caption_languages=None,
         idempotency_key=None,
         cancel_event=None,
@@ -645,7 +644,6 @@ class TldwClient:
             max_credits=max_credits,
             force_asr=force_asr,
             refresh_source=refresh_source,
-            upload_id=upload_id,
             preferred_caption_languages=preferred_caption_languages,
         )
 
@@ -661,7 +659,6 @@ class TldwClient:
         max_credits=None,
         force_asr=None,
         refresh_source=None,
-        upload_id=None,
         preferred_caption_languages=None,
     ):
         if refresh_source is not None and not isinstance(refresh_source, bool):
@@ -671,10 +668,8 @@ class TldwClient:
             **_spending_options(transcription, max_credits, force_asr),
         }
         if path == "/v1/transcripts":
-            if (media is not None) == (upload_id is not None):
-                raise ValueError("Provide exactly one media or upload_id.")
-            if upload_id is not None:
-                body["upload_id"] = _identifier(upload_id, "Upload ID")
+            if media is None:
+                raise ValueError("Provide media.")
             if preferred_caption_languages is not None:
                 if (
                     not isinstance(preferred_caption_languages, list)
@@ -1078,9 +1073,8 @@ class TldwClient:
 
     def extract_transcript(
         self,
-        media=None,
+        media,
         *,
-        upload_id=None,
         preferred_caption_languages=None,
         idempotency_key=None,
         cancel_event=None,
@@ -1105,7 +1099,6 @@ class TldwClient:
             max_credits=max_credits,
             force_asr=force_asr,
             refresh_source=refresh_source,
-            upload_id=upload_id,
             preferred_caption_languages=preferred_caption_languages,
         )
         try:

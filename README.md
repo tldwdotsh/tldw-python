@@ -11,10 +11,10 @@ Download it, verify it against the SHA-256 checksum shown on that page, then
 install the verified local file:
 
 ```sh
-curl -fsSLo tldw_client-0.2.7-py3-none-any.whl \
-  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.7-py3-none-any.whl' &&
-  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.7-py3-none-any.whl' | shasum -a 256 -c - &&
-  python -m pip install ./tldw_client-0.2.7-py3-none-any.whl
+curl -fsSLo tldw_client-0.2.8-py3-none-any.whl \
+  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.8-py3-none-any.whl' &&
+  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.8-py3-none-any.whl' | shasum -a 256 -c - &&
+  python -m pip install ./tldw_client-0.2.8-py3-none-any.whl
 ```
 
 The package is imported as `tldw_client`. Only `tldw-client` on PyPI and your
@@ -185,7 +185,6 @@ transcript jobs have `output_mode="transcript"`, a `transcript_id`, and no
 a full source read, returning `receipt`, `job` and `transcript`; timeout and
 source-permission errors retain the accepted receipt and job ID.
 
-Use `submit_transcript(upload_id=...)` for your parsed subtitle upload.
 `preferred_caption_languages` selects original captions. Spending/ASR controls
 and `refresh_source` are supported, but analysis instructions are not.
 Submission needs `jobs:write`, polling `jobs:read`, and source reads
@@ -311,6 +310,11 @@ credits reset monthly. Agents cannot buy credits, and reading account usage does
 not change plans.
 
 Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `TRANSCRIPTION_NOT_ALLOWED` (HTTP 422); `MAX_CREDITS_EXCEEDED` (HTTP 422) means a supplied ceiling is invalid or below the required charge. Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
+
+## Changes in 0.2.8
+
+Customer subtitle uploads are no longer supported. `submit_transcript()` and
+`extract_transcript()` no longer accept `upload_id` and always need `media`.
 
 ## Changes in 0.2.7
 

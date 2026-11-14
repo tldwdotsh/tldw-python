@@ -8,7 +8,6 @@ from tldw_client import TldwClient, TldwError, TldwTimeoutError
 
 JOB = "00000000-0000-4000-8000-000000000101"
 TRANSCRIPT = "00000000-0000-4000-8000-000000000102"
-UPLOAD = "00000000-0000-4000-8000-000000000103"
 ACCEPTED = {
     "job_id": JOB,
     "output_mode": "transcript",
@@ -68,7 +67,7 @@ class TranscriptExtractionTests(unittest.TestCase):
         self.assertEqual(json.loads(calls[0][3]), {"media": "Original source"})
         self.assertEqual(calls[0][2]["Idempotency-Key"], "extract-once")
 
-    def test_upload_preferences_and_explicit_spending_options(self):
+    def test_caption_preferences_and_explicit_spending_options(self):
         calls = []
 
         def transport(method, url, headers, body, timeout):
@@ -77,9 +76,7 @@ class TranscriptExtractionTests(unittest.TestCase):
             return response(ACCEPTED, 202)
 
         client = self.client(transport)
-        client.submit_transcript(
-            upload_id=UPLOAD, preferred_caption_languages=["es", "en-US"]
-        )
+        client.submit_transcript("source", preferred_caption_languages=["es", "en-US"])
         client.submit_transcript(
             "source",
             transcription="if_needed",
@@ -89,7 +86,7 @@ class TranscriptExtractionTests(unittest.TestCase):
         )
         self.assertEqual(
             calls[0],
-            {"upload_id": UPLOAD, "preferred_caption_languages": ["es", "en-US"]},
+            {"media": "source", "preferred_caption_languages": ["es", "en-US"]},
         )
         self.assertEqual(
             calls[1],
@@ -107,10 +104,10 @@ class TranscriptExtractionTests(unittest.TestCase):
         client = self.client(lambda *args: calls.append(args))
         with self.assertRaises(TypeError):
             client.submit_transcript("source", instructions="Analyze")
+        with self.assertRaises(TypeError):
+            client.submit_transcript(upload_id=JOB)
         for media, options in [
             (None, {}),
-            ("source", {"upload_id": UPLOAD}),
-            (None, {"upload_id": "https://bad.example"}),
             ("source", {"preferred_caption_languages": ["invalid tag"]}),
             ("source", {"force_asr": True}),
         ]:
