@@ -34,7 +34,7 @@ __all__ = [
     "TldwJobError",
     "TldwTimeoutError",
 ]
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 _MAX_BODY = 8 * 1024 * 1024
 _TRANSIENT = {429, 502, 503, 504}
 
@@ -72,19 +72,13 @@ def _spending_options(transcription=None, max_credits=None, force_asr=None):
 
 _JOB_STATES = {
     "queued",
+    # Waiting for one of the plan's concurrent-job slots; not terminal.
+    "queued_for_slot",
     "fetching_metadata",
     "fetching_transcript",
     "downloading_audio",
     "transcribing",
     "summarizing",
-    "completed",
-    "failed",
-    "canceled",
-}
-_COMPARISON_STATES = {
-    "queued",
-    "waiting",
-    "processing",
     "completed",
     "failed",
     "canceled",
@@ -969,19 +963,6 @@ class TldwClient:
             )
         return data
 
-    def _comparison(self, data, resource_id):
-        resource = _object(data.get("comparison"), "comparison")
-        if (
-            resource.get("id") != resource_id
-            or resource.get("status") not in _COMPARISON_STATES
-        ):
-            raise TldwError(
-                "API returned an invalid comparison.",
-                code="INVALID_RESPONSE",
-                comparison_id=resource_id,
-            )
-        return resource
-
     def _wait(
         self,
         resource_id,
@@ -1010,27 +991,17 @@ class TldwClient:
             while True:
                 if self._clock() >= deadline:
                     raise TldwTimeoutError()
-                path = f"/v1/{'jobs' if kind == 'job' else 'comparisons'}/{resource_id}"
                 data, retry_after = self._request(
-                    "GET", path, cancel_event=cancel_event, deadline=deadline
+                    "GET",
+                    f"/v1/jobs/{resource_id}",
+                    cancel_event=cancel_event,
+                    deadline=deadline,
                 )
-                resource = (
-                    self._job(data, resource_id)
-                    if kind == "job"
-                    else self._comparison(data, resource_id)
-                )
+                resource = self._job(data, resource_id)
                 if on_progress:
                     on_progress(resource)
                 if resource["status"] == "completed":
                     self._poll_hints.pop((kind, resource_id), None)
-                    if kind == "comparison" and not resource.get("result"):
-                        raise TldwError(
-                            "Comparison result access is unavailable; summaries:read is required.",
-                            code="RESULT_SCOPE_REQUIRED",
-                            comparison_id=resource_id,
-                        )
-                    if kind == "comparison":
-                        _object(resource["result"], "comparison result")
                     return resource
                 if resource["status"] in {"failed", "canceled"}:
                     self._poll_hints.pop((kind, resource_id), None)
@@ -1157,65 +1128,3 @@ class TldwClient:
             error.job_id = receipt["job_id"]
             error.receipt = _safe_error_resource(receipt, self.__token)
             raise
-
-    def compare_tiktoks(
-        self,
-        urls,
-        *,
-        instructions=None,
-        idempotency_key=None,
-        cancel_event=None,
-        transcription=None,
-        max_credits=None,
-        force_asr=None,
-    ):
-        if not isinstance(urls, list) or not 2 <= len(urls) <= 20:
-            raise ValueError("Supply between 2 and 20 TikTok URLs.")
-        stable_key = _idempotency_key(idempotency_key)
-        body = {
-            "urls": urls,
-            **_spending_options(transcription, max_credits, force_asr),
-        }
-        if instructions is not None:
-            body["instructions"] = instructions
-        try:
-            data, retry_after = self._request(
-                "POST",
-                "/v1/comparisons",
-                body=body,
-                idempotency_key=stable_key,
-                cancel_event=cancel_event,
-            )
-        except TldwError as error:
-            error.idempotency_key = stable_key
-            raise
-        try:
-            resource_id = _identifier(
-                _object(data.get("comparison"), "comparison").get("id"), "Comparison ID"
-            )
-            self._remember_poll_hint(
-                resource_id,
-                "comparison",
-                data["comparison"].get("next_poll_after_ms"),
-                retry_after,
-            )
-            return self._comparison(data, resource_id)
-        except ValueError:
-            error = TldwError(
-                "API returned an invalid accepted comparison.", code="INVALID_RESPONSE"
-            )
-            error.idempotency_key = stable_key
-            raise error from None
-        except TldwError as error:
-            error.idempotency_key = stable_key
-            raise
-
-    def get_comparison(self, comparison_id, *, cancel_event=None):
-        comparison_id = _identifier(comparison_id)
-        data, _ = self._request(
-            "GET", f"/v1/comparisons/{comparison_id}", cancel_event=cancel_event
-        )
-        return self._comparison(data, comparison_id)
-
-    def wait_for_comparison(self, comparison_id, **options):
-        return self._wait(_identifier(comparison_id), "comparison", **options)

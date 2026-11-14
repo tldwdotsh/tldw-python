@@ -17,7 +17,6 @@ from tldw_client import (
 
 JOB = "00000000-0000-4000-8000-000000000101"
 SUMMARY = "00000000-0000-4000-8000-000000000102"
-COMPARISON = "00000000-0000-4000-8000-000000000103"
 TOKEN = "tldw_fixture_not_a_real_secret"
 
 
@@ -195,13 +194,13 @@ class ClientTests(unittest.TestCase):
             client.submit_analysis("source", idempotency_key="late-reply")
         self.assertEqual(caught.exception.idempotency_key, "late-reply")
 
-    def test_custom_transport_protocol_failure_keeps_comparison_key(self):
+    def test_custom_transport_protocol_failure_keeps_submission_key(self):
         def transport(*args):
             raise BadStatusLine("private protocol debug text")
 
         client = self.client(transport)
         with self.assertRaises(TldwError) as caught:
-            client.compare_tiktoks(["clip-a", "clip-b"])
+            client.submit_analysis("A complete source")
         self.assertEqual(caught.exception.code, "NETWORK_ERROR")
         self.assertTrue(caught.exception.idempotency_key)
         self.assertNotIn("private protocol", str(caught.exception))
@@ -268,6 +267,22 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(result["summary_id"], SUMMARY)
         self.assertEqual(polls, [0, 3])
         self.assertEqual(progress, ["queued", "completed"])
+
+    def test_wait_treats_queued_for_slot_as_not_terminal(self):
+        progress = []
+
+        def transport(*args):
+            return response(
+                job("queued_for_slot", queue_position=1, max_concurrent_jobs=1)
+                if not progress
+                else job("completed")
+            )
+
+        result = self.client(transport).wait_for_job(
+            JOB, on_progress=lambda value: progress.append(value["status"])
+        )
+        self.assertEqual(result["summary_id"], SUMMARY)
+        self.assertEqual(progress, ["queued_for_slot", "completed"])
 
     def test_wait_failure_carries_durable_id(self):
         for status in ("failed", "canceled"):
@@ -366,22 +381,10 @@ class ClientTests(unittest.TestCase):
         self.assertNotIn(TOKEN, str(error))
         self.assertNotIn(TOKEN, repr(client))
 
-    def test_comparison_unwraps_and_checks_result_access(self):
-        value = {
-            "id": COMPARISON,
-            "status": "completed",
-            "result": {"summary": "Compared speech", "findings": [], "limitations": []},
-        }
-        client = self.client(lambda *args: response({"comparison": value}))
-        self.assertEqual(client.compare_tiktoks(["url1", "url2"])["id"], COMPARISON)
-        self.assertEqual(
-            client.wait_for_comparison(COMPARISON)["result"]["summary"],
-            "Compared speech",
-        )
-        value["result"] = None
-        with self.assertRaises(TldwError) as caught:
-            client.wait_for_comparison(COMPARISON)
-        self.assertEqual(caught.exception.code, "RESULT_SCOPE_REQUIRED")
+    def test_client_exposes_no_comparison_methods(self):
+        client = self.client(lambda *args: response({}))
+        for name in ("compare_tiktoks", "get_comparison", "wait_for_comparison"):
+            self.assertFalse(hasattr(client, name), name)
 
     def test_invalid_json_and_oversized_responses_fail_safely(self):
         for body in (b"not-json", b" " * (8 * 1024 * 1024 + 1)):
@@ -436,19 +439,6 @@ class ClientTests(unittest.TestCase):
         with self.assertRaises(TldwTimeoutError) as caught:
             self.client(transport).submit_analysis("A complete source")
         self.assertIn("same idempotency key", str(caught.exception))
-
-    def test_a_malformed_accepted_comparison_is_an_invalid_response(self):
-        def transport(*_):
-            return response({"comparison": {"id": "../../admin"}}, 202)
-
-        with self.assertRaises(TldwError) as caught:
-            self.client(transport).compare_tiktoks(
-                [
-                    "https://www.tiktok.com/@a/video/7000000000000000001",
-                    "https://www.tiktok.com/@b/video/7000000000000000002",
-                ]
-            )
-        self.assertEqual(caught.exception.code, "INVALID_RESPONSE")
 
 
 if __name__ == "__main__":

@@ -11,10 +11,10 @@ Download it, verify it against the SHA-256 checksum shown on that page, then
 install the verified local file:
 
 ```sh
-curl -fsSLo tldw_client-0.2.6-py3-none-any.whl \
-  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.6-py3-none-any.whl' &&
-  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.6-py3-none-any.whl' | shasum -a 256 -c - &&
-  python -m pip install ./tldw_client-0.2.6-py3-none-any.whl
+curl -fsSLo tldw_client-0.2.7-py3-none-any.whl \
+  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.7-py3-none-any.whl' &&
+  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.7-py3-none-any.whl' | shasum -a 256 -c - &&
+  python -m pip install ./tldw_client-0.2.7-py3-none-any.whl
 ```
 
 The package is imported as `tldw_client`. Only `tldw-client` on PyPI and your
@@ -22,8 +22,11 @@ operator's verified download are this client; similarly named projects are not.
 
 Use your deployment's API origin and a scoped **tldw API key**, never a model
 provider key. Signup and one-time human verification happen in the web app.
-REST, MCP and plugins share 100 monthly Free caption/text credits, Hobby/Pro
-limits and purchased credits. Polling does not create another analysis or reset your allowance.
+Polling does not create another analysis or reset your allowance.
+
+The SDK, the Claude connector, Claude Code and the skill use the same tldw.sh
+account and credits. A new API key does not add free credits. Free includes 100
+monthly caption/text credits and stops at 30 minutes per source.
 
 ```python
 import os
@@ -52,13 +55,51 @@ combines submission, polling and result retrieval, returning a dictionary with
 `receipt`; unknown submission errors retain `idempotency_key`. Reuse that key
 with exactly the same source/instructions after an uncertain network outcome.
 
+## Three prompts
+
+Each is one link and one job: submit, keep the job ID, wait, then read.
+
+```python
+media = "https://youtu.be/VIDEO_ID"
+# YouTube research brief. Cost: 1 credit per caption minute. A 20-minute talk is 20 credits. Reading the saved result again is free.
+brief = client.submit_analysis(
+    media,
+    instructions="Main argument and three useful takeaways. Cite the minute for each.",
+    idempotency_key="brief-001",
+)
+# Transcript only: "Transcript only. Do not summarize." Use submit_transcript; it sends
+# no instructions. Cost: Same caption rate, no summary. Reading it again is free.
+source = client.submit_transcript(media, idempotency_key="source-001")
+# Claims and evidence. Cost: Same caption rate. Audio only on the platforms account_usage lists for your plan, at 3 credits a minute.
+claims = client.submit_analysis(
+    media,
+    instructions="List practical claims, the evidence, and the caveats. Flag anything supported by one example.",
+    idempotency_key="claims-001",
+)
+job = client.wait_for_job(brief["job_id"])
+print(client.get_summary(job["summary_id"])["content"])
+```
+
+## Limits that stop a job
+
+Four limits can stop a job. `getUsage` / `get_usage` (`GET /v1/me`) returns them
+as `walls`, each with `active` for your account. A wall error carries
+`error.details.wall` and `error.details.upgrade`, with the next plan and a
+`billing_url` for the account owner, at submit time and on a failed job.
+
+- Source length: Free stops at 30 minutes per source; paid plans allow longer
+  sources up to their plan limit.
+- Monthly credits: when included credits run out, new jobs stop until the next
+  billing period or an upgrade. Agents cannot buy credits.
+- Audio: a source without captions needs audio transcription, which runs only on
+  plans and platforms that allow it (`plan.transcription_platforms`).
+- Concurrent jobs: a job over your plan's running-job limit may wait with status
+  `queued_for_slot` and a `queue_position`. It is not terminal; the wait helpers
+  keep polling until it runs. A full queue returns HTTP 429 `RATE_LIMITED`.
+
 Other methods:
 
-- `get_job(job_id)`, `get_summary(summary_id)`, `get_usage()` (`account:read`).
-- `compare_tiktoks(urls, instructions=..., idempotency_key=...)` returns an
-  accepted comparison view. Persist its `id` before waiting.
-- `get_comparison(id)`, `wait_for_comparison(id, timeout_seconds=180)` return
-  the unwrapped comparison view. Completed output needs `summaries:read`.
+- `submit_transcript(media, ...)`, `get_job(job_id)`, `get_summary(summary_id)`, `get_usage()` (`account:read`).
 
 Polling accepts `on_progress(resource)` and `poll_interval_seconds` (default
 1.5, minimum 0.25). It honors larger server polling hints and Retry-After.
@@ -261,15 +302,23 @@ these controls in the same idempotent request body on retries. Jobs expose
 `credits.estimated`, `reserved`, `final`, the billing class/rate and real source
 duration; polling does not create another processing charge.
 
-For `compareTikToks` / `compare_tiktoks`, the cap covers all distinct supplied
-clips: each receives an equal share rounded down to 0.01 credit. Unused shares
-are not redistributed. Comparison aggregation adds no customer processing credits.
 Source minutes round up to 0.1 minute with a 0.5-minute minimum before the rate
 multiplier. Raw text uses estimated reading minutes.
 
 Free includes 100 credits per month for captions/text, Hobby costs USD20/month
 with 1,000 credits, and Pro costs USD99/month with 5,000 credits. Included
-allowance is used first, then purchased credits, which do not expire. Reading
-account usage does not buy credits or change plans.
+credits reset monthly. Agents cannot buy credits, and reading account usage does
+not change plans.
 
 Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `TRANSCRIPTION_NOT_ALLOWED` (HTTP 422); `MAX_CREDITS_EXCEEDED` (HTTP 422) means a supplied ceiling is invalid or below the required charge. Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
+
+## Changes in 0.2.7
+
+API keys can reach only the customer API, so the client now calls only those
+routes. Removed:
+
+- `compare_tiktoks()` (`POST /v1/comparisons`)
+- `get_comparison()` (`GET /v1/comparisons/{id}`)
+- `wait_for_comparison()` (polled `GET /v1/comparisons/{id}`)
+
+`TldwError.comparison_id` remains for compatibility and is always `None`.
