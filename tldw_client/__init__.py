@@ -5,16 +5,27 @@ No server-returned URLs are followed. Waiting never cancels accepted server work
 
 from __future__ import annotations
 
+import io
 import json
 import math
+import re
+import socket
 import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.parse import urlencode, urlsplit
+from urllib.request import (
+    HTTPHandler,
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    ProxyHandler,
+    Request,
+    build_opener,
+)
 
 __all__ = [
     "TldwCanceledError",
@@ -23,7 +34,7 @@ __all__ = [
     "TldwJobError",
     "TldwTimeoutError",
 ]
-__version__ = "0.2.1"
+__version__ = "0.2.5"
 _MAX_BODY = 8 * 1024 * 1024
 _TRANSIENT = {429, 502, 503, 504}
 
@@ -91,6 +102,7 @@ class TldwError(Exception):
         retry_after_seconds=None,
         job_id=None,
         comparison_id=None,
+        details=None,
     ):
         super().__init__(message)
         self.code = code
@@ -99,6 +111,8 @@ class TldwError(Exception):
         self.retry_after_seconds = retry_after_seconds
         self.job_id = job_id
         self.comparison_id = comparison_id
+        # Redacted API error.details, e.g. {"job_id": ...} or {"required_scope": ...}.
+        self.details = details
 
 
 class TldwTimeoutError(TldwError):
@@ -222,16 +236,152 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def _remaining(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError()
+    return remaining
+
+
+class _DeadlineReader(io.RawIOBase):
+    """Refresh the socket budget before every read, including HTTP framing."""
+
+    def __init__(self, raw, connection, deadline):
+        self._raw = raw
+        self._connection = connection
+        self._deadline = deadline
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        self._connection.settimeout(_remaining(self._deadline))
+        count = self._raw.readinto(buffer)
+        _remaining(self._deadline)
+        return count
+
+    def close(self):
+        try:
+            self._raw.close()
+        finally:
+            super().close()
+
+
+class _DeadlineSocket:
+    """Adapt http.client's socket/file interface without background threads."""
+
+    def __init__(self, connection, deadline):
+        self._connection = connection
+        self._deadline = deadline
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+    def gettimeout(self):
+        # ssl.wrap_socket inherits this remaining budget for its handshake.
+        return _remaining(self._deadline)
+
+    def sendall(self, data):
+        self._connection.settimeout(_remaining(self._deadline))
+        self._connection.sendall(data)
+        _remaining(self._deadline)
+
+    def makefile(self, mode):
+        raw = self._connection.makefile(mode, buffering=0)
+        return io.BufferedReader(_DeadlineReader(raw, self._connection, self._deadline))
+
+
+class _DeadlineConnection:
+    def __init__(self, *args, deadline, **kwargs):
+        self._deadline = deadline
+        super().__init__(*args, **kwargs)
+        self._create_connection = self._connect_socket
+
+    def _connect_socket(self, address, timeout, source_address):
+        # The system resolver is synchronous and has no portable cancellation
+        # API. Check elapsed time immediately afterwards, before opening a socket.
+        addresses = socket.getaddrinfo(*address, type=socket.SOCK_STREAM)
+        _remaining(self._deadline)
+        last_error = None
+        for family, kind, protocol, _, destination in addresses:
+            connection = socket.socket(family, kind, protocol)
+            try:
+                connection.settimeout(_remaining(self._deadline))
+                if source_address:
+                    connection.bind(source_address)
+                connection.connect(destination)
+                _remaining(self._deadline)
+                return _DeadlineSocket(connection, self._deadline)
+            except OSError as error:
+                connection.close()
+                last_error = error
+        if last_error is not None:
+            raise last_error
+        raise OSError("The API host did not resolve to a stream address.")
+
+    def connect(self):
+        super().connect()
+        # HTTPSConnection replaces the initial socket during TLS negotiation.
+        if not isinstance(self.sock, _DeadlineSocket):
+            self.sock = _DeadlineSocket(self.sock, self._deadline)
+        _remaining(self._deadline)
+
+
+class _DeadlineHTTPConnection(_DeadlineConnection, HTTPConnection):
+    pass
+
+
+class _DeadlineHTTPSConnection(_DeadlineConnection, HTTPSConnection):
+    pass
+
+
+class _DeadlineHTTPHandler(HTTPHandler):
+    def __init__(self, deadline):
+        super().__init__()
+        self._deadline = deadline
+
+    def http_open(self, request):
+        return self.do_open(
+            lambda *args, **kwargs: _DeadlineHTTPConnection(
+                *args, deadline=self._deadline, **kwargs
+            ),
+            request,
+        )
+
+
+class _DeadlineHTTPSHandler(HTTPSHandler):
+    def __init__(self, deadline):
+        super().__init__()
+        self._deadline = deadline
+
+    def https_open(self, request):
+        return self.do_open(
+            lambda *args, **kwargs: _DeadlineHTTPSConnection(
+                *args, deadline=self._deadline, **kwargs
+            ),
+            request,
+            context=self._context,
+        )
+
+
 def _http_transport(method, url, headers, payload, timeout):
     """Return status/headers/body; never follow redirects or environment proxies."""
-    opener = build_opener(_NoRedirect(), ProxyHandler({}))
+    deadline = time.monotonic() + timeout
+    opener = build_opener(
+        _NoRedirect(),
+        ProxyHandler({}),
+        _DeadlineHTTPHandler(deadline),
+        _DeadlineHTTPSHandler(deadline),
+    )
     request = Request(url, data=payload, headers=headers, method=method)
     try:
-        response = opener.open(request, timeout=timeout)
+        response = opener.open(request, timeout=_remaining(deadline))
     except HTTPError as error:
         response = error
     with response:
+        _remaining(deadline)
         body = response.read(_MAX_BODY + 1)
+        _remaining(deadline)
         return (
             response.status,
             {key.lower(): value for key, value in response.headers.items()},
@@ -354,10 +504,21 @@ class TldwClient:
                     min(remaining, self.request_timeout_seconds),
                 )
             except TimeoutError:
-                raise TldwTimeoutError(
-                    "The API request timed out. Retry submission with the same idempotency key if its outcome is unknown."
-                ) from None
-            except (URLError, OSError):
+                if method != "GET" or self._clock() >= deadline:
+                    raise TldwTimeoutError(
+                        "The API request timed out. Accepted work continues on the server."
+                        if method == "GET"
+                        else "The API request timed out. Retry submission with the same idempotency key if its outcome is unknown."
+                    ) from None
+                # A slow read (for example one poll inside a long wait) has no side
+                # effects; retry it while the caller's deadline allows.
+                error = TldwTimeoutError(
+                    "The API request timed out. Accepted work continues on the server."
+                )
+                if attempt == 3:
+                    raise error from None
+                delay = min(10, 0.5 * 2**attempt)
+            except (URLError, OSError, HTTPException):
                 if self._clock() >= deadline:
                     raise TldwTimeoutError() from None
                 error = TldwError(
@@ -369,6 +530,8 @@ class TldwClient:
                 delay = min(10, 0.5 * 2**attempt)
             else:
                 self._check_canceled(cancel_event)
+                if self._clock() >= deadline:
+                    raise TldwTimeoutError()
                 if len(raw) > _MAX_BODY:
                     raise TldwError(
                         "API response exceeded the client size limit.",
@@ -398,6 +561,16 @@ class TldwClient:
                         else value
                     )
 
+                extra = detail.get("details")
+                extra = (
+                    _safe_error_resource(extra, self.__token)
+                    if isinstance(extra, dict)
+                    else None
+                )
+                try:
+                    active_job = _identifier((extra or {}).get("job_id"))
+                except ValueError:
+                    active_job = None
                 error = TldwError(
                     safe(detail.get("message"), f"API request failed ({status})."),
                     code=safe(detail.get("code"), "HTTP_ERROR"),
@@ -406,6 +579,8 @@ class TldwClient:
                         detail.get("request_id") or response_headers.get("x-request-id")
                     ),
                     retry_after_seconds=retry_after,
+                    job_id=active_job,
+                    details=extra,
                 )
                 if status not in _TRANSIENT or attempt == 3:
                     raise error
@@ -427,18 +602,111 @@ class TldwClient:
         transcription=None,
         max_credits=None,
         force_asr=None,
+        refresh_source=None,
     ):
+        """Submit text or a public URL and retain the returned job_id before waiting.
+
+        X URLs default to auto: accessible captions for one attached video are
+        included when the deployment supports it. Explicit scope=post reads
+        only post text. Use instructions for focus or a requested output language
+        (for example, 'Summarize the spoken content in Spanish.'). X audio
+        transcription and visual analysis are not enabled. Missing captions fail
+        explicitly. Reuse the exact media, instructions and idempotency_key
+        after an unknown submission outcome.
+        X/article sources may reuse a saved snapshot for 24 hours. Set
+        refresh_source=True to fetch current source content without forcing ASR.
+        """
+        return self._submit_media(
+            "/v1/analyses",
+            media,
+            instructions=instructions,
+            idempotency_key=idempotency_key,
+            cancel_event=cancel_event,
+            transcription=transcription,
+            max_credits=max_credits,
+            force_asr=force_asr,
+            refresh_source=refresh_source,
+        )
+
+    def submit_transcript(
+        self,
+        media=None,
+        *,
+        upload_id=None,
+        preferred_caption_languages=None,
+        idempotency_key=None,
+        cancel_event=None,
+        transcription=None,
+        max_credits=None,
+        force_asr=None,
+        refresh_source=None,
+    ):
+        """Save original captions/source text without summary generation or an LLM call."""
+        return self._submit_media(
+            "/v1/transcripts",
+            media,
+            idempotency_key=idempotency_key,
+            cancel_event=cancel_event,
+            transcription=transcription,
+            max_credits=max_credits,
+            force_asr=force_asr,
+            refresh_source=refresh_source,
+            upload_id=upload_id,
+            preferred_caption_languages=preferred_caption_languages,
+        )
+
+    def _submit_media(
+        self,
+        path,
+        media,
+        *,
+        instructions=None,
+        idempotency_key=None,
+        cancel_event=None,
+        transcription=None,
+        max_credits=None,
+        force_asr=None,
+        refresh_source=None,
+        upload_id=None,
+        preferred_caption_languages=None,
+    ):
+        if refresh_source is not None and not isinstance(refresh_source, bool):
+            raise ValueError("refresh_source must be a boolean.")
         stable_key = _idempotency_key(idempotency_key)
         body = {
-            "media": media,
             **_spending_options(transcription, max_credits, force_asr),
         }
+        if path == "/v1/transcripts":
+            if (media is not None) == (upload_id is not None):
+                raise ValueError("Provide exactly one media or upload_id.")
+            if upload_id is not None:
+                body["upload_id"] = _identifier(upload_id, "Upload ID")
+            if preferred_caption_languages is not None:
+                if (
+                    not isinstance(preferred_caption_languages, list)
+                    or len(preferred_caption_languages) > 10
+                    or any(
+                        not isinstance(value, str)
+                        or not re.fullmatch(
+                            r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", value
+                        )
+                        for value in preferred_caption_languages
+                    )
+                ):
+                    raise ValueError(
+                        "preferred_caption_languages must contain at most 10 BCP-47 language tags."
+                    )
+                body["preferred_caption_languages"] = preferred_caption_languages
+        if media is not None:
+            body["media"] = media
         if instructions is not None:
             body["instructions"] = instructions
+        if refresh_source is not None:
+            body["refresh_source"] = refresh_source
         try:
             data, retry_after = self._request(
                 "POST",
-                "/v1/analyses",
+                path,
                 body=body,
                 idempotency_key=stable_key,
                 cancel_event=cancel_event,
@@ -451,6 +719,11 @@ class TldwClient:
             if (
                 not isinstance(data.get("job"), dict)
                 or data["job"].get("id") != data["job_id"]
+            ):
+                raise ValueError()
+            if path == "/v1/transcripts" and (
+                data.get("output_mode") != "transcript"
+                or data["job"].get("output_mode") != "transcript"
             ):
                 raise ValueError()
         except ValueError:
@@ -487,6 +760,13 @@ class TldwClient:
             or not isinstance(progress, int)
             or isinstance(progress, bool)
             or not 0 <= progress <= 100
+            or (
+                data.get("output_mode") is not None
+                and (
+                    not isinstance(data["output_mode"], str)
+                    or data["output_mode"] not in {"summary", "analysis", "transcript"}
+                )
+            )
         ):
             raise TldwError(
                 "API returned an invalid job.",
@@ -495,10 +775,16 @@ class TldwClient:
             )
         if data["status"] == "completed":
             try:
-                _identifier(data.get("summary_id"))
+                _identifier(
+                    data.get(
+                        "transcript_id"
+                        if data.get("output_mode") == "transcript"
+                        else "summary_id"
+                    )
+                )
             except ValueError:
                 raise TldwError(
-                    "Completed job has no valid summary ID.",
+                    "Completed job has no valid result ID.",
                     code="INVALID_RESPONSE",
                     job_id=resource_id,
                 ) from None
@@ -520,6 +806,149 @@ class TldwClient:
 
     def get_usage(self, *, cancel_event=None):
         return self._request("GET", "/v1/me", cancel_event=cancel_event)[0]
+
+    def get_transcript(self, summary_id, *, cancel_event=None):
+        """Read the owner-private saved source separately from generated output.
+
+        Timed video sources return segments; text/X sources return blocks and
+        text. X caption blocks retain start_s/end_s. Requires summaries:read.
+        """
+        summary_id = _identifier(summary_id)
+        data, _ = self._request(
+            "GET", f"/v1/summaries/{summary_id}/transcript", cancel_event=cancel_event
+        )
+        return self._transcript(data)
+
+    def _transcript(self, data):
+        try:
+            _identifier(data.get("transcript_id"))
+        except (ValueError, TypeError):
+            raise TldwError(
+                "API returned an invalid transcript.", code="INVALID_RESPONSE"
+            ) from None
+        if (
+            not isinstance(data.get("timed"), bool)
+            or "text" not in data
+            or "language" not in data
+            or not isinstance(data.get("source"), str)
+            or (
+                data.get("language") is not None
+                and not isinstance(data["language"], str)
+            )
+            or not isinstance(data.get("segments"), list)
+            or not isinstance(data.get("blocks"), list)
+            or (
+                data.get("text") is not None
+                if data["timed"]
+                else not isinstance(data.get("text"), str)
+            )
+        ):
+            raise TldwError(
+                "API returned an invalid transcript.", code="INVALID_RESPONSE"
+            )
+        return data
+
+    def list_transcripts(
+        self,
+        *,
+        limit=50,
+        cursor=None,
+        since=None,
+        until=None,
+        unread_only=False,
+        cancel_event=None,
+    ):
+        """List saved-source metadata by latest owned request; never marks read.
+
+        since is inclusive, until exclusive; follow next_cursor with the same filters.
+        Timestamp strings use ISO 8601. Requires summaries:read.
+        """
+        if (
+            not isinstance(limit, int)
+            or isinstance(limit, bool)
+            or not 1 <= limit <= 100
+        ):
+            raise ValueError("limit must be an integer between 1 and 100.")
+        if not isinstance(unread_only, bool):
+            raise TypeError("unread_only must be a boolean.")
+        query = {"limit": str(limit), "unread_only": str(unread_only).lower()}
+        for name, value in (("cursor", cursor), ("since", since), ("until", until)):
+            if value is None:
+                continue
+            if (
+                not isinstance(value, str)
+                or not value
+                or len(value) > (1024 if name == "cursor" else 128)
+            ):
+                raise ValueError(f"{name} must be a bounded non-empty string.")
+            query[name] = value
+        data, _ = self._request(
+            "GET", "/v1/transcripts?" + urlencode(query), cancel_event=cancel_event
+        )
+        if not isinstance(data.get("items"), list) or (
+            data.get("next_cursor") is not None
+            and not isinstance(data["next_cursor"], str)
+        ):
+            raise TldwError(
+                "API returned an invalid transcript list.", code="INVALID_RESPONSE"
+            )
+        return data
+
+    def get_saved_transcript(self, transcript_id, *, cancel_event=None):
+        """Read the full original source by transcript id; never marks read."""
+        transcript_id = _identifier(transcript_id)
+        data, _ = self._request(
+            "GET", f"/v1/transcripts/{transcript_id}", cancel_event=cancel_event
+        )
+        return self._transcript(data)
+
+    def get_saved_transcript_page(
+        self, transcript_id, *, offset=0, limit=100, cancel_event=None
+    ):
+        """Read a bounded source page; follow next_offset. Never marks read."""
+        transcript_id = _identifier(transcript_id)
+        for name, value, minimum, maximum in (
+            ("offset", offset, 0, 1_000_000_000),
+            ("limit", limit, 1, 500),
+        ):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or not minimum <= value <= maximum
+            ):
+                raise ValueError(
+                    f"{name} must be an integer between {minimum} and {maximum}."
+                )
+        data, _ = self._request(
+            "GET",
+            f"/v1/transcripts/{transcript_id}/page?offset={offset}&limit={limit}",
+            cancel_event=cancel_event,
+        )
+        return self._transcript(data)
+
+    def mark_transcript_read(self, transcript_id, read=True, *, cancel_event=None):
+        """Explicitly mark your source read/unread; repeated marks are idempotent."""
+        transcript_id = _identifier(transcript_id)
+        if not isinstance(read, bool):
+            raise TypeError("read must be a boolean.")
+        data, _ = self._request(
+            "PATCH",
+            f"/v1/transcripts/{transcript_id}/read",
+            body={"read": read},
+            cancel_event=cancel_event,
+        )
+        if (
+            data.get("id") != transcript_id
+            or not isinstance(data.get("unread"), bool)
+            or (
+                data.get("read_at") is not None and not isinstance(data["read_at"], str)
+            )
+        ):
+            raise TldwError(
+                "API returned an invalid transcript read state.",
+                code="INVALID_RESPONSE",
+            )
+        return data
 
     def _comparison(self, data, resource_id):
         resource = _object(data.get("comparison"), "comparison")
@@ -621,6 +1050,7 @@ class TldwClient:
         transcription=None,
         max_credits=None,
         force_asr=None,
+        refresh_source=None,
     ):
         _bound(timeout_seconds, "timeout_seconds", 0.001, 3600)
         _bound(poll_interval_seconds, "poll_interval_seconds", 0.25, 30)
@@ -634,6 +1064,7 @@ class TldwClient:
             transcription=transcription,
             max_credits=max_credits,
             force_asr=force_asr,
+            refresh_source=refresh_source,
         )
         try:
             job = self.wait_for_job(
@@ -643,8 +1074,66 @@ class TldwClient:
                 on_progress=on_progress,
                 poll_interval_seconds=poll_interval_seconds,
             )
+            if job.get("output_mode") == "transcript":
+                raise TldwError(
+                    "Expected an analysis result, received a transcript job.",
+                    code="INVALID_RESPONSE",
+                )
             summary = self.get_summary(job["summary_id"], cancel_event=cancel_event)
             return {"receipt": receipt, "job": job, "summary": summary}
+        except TldwError as error:
+            error.job_id = receipt["job_id"]
+            error.receipt = _safe_error_resource(receipt, self.__token)
+            raise
+
+    def extract_transcript(
+        self,
+        media=None,
+        *,
+        upload_id=None,
+        preferred_caption_languages=None,
+        idempotency_key=None,
+        cancel_event=None,
+        timeout_seconds=180,
+        on_progress=None,
+        poll_interval_seconds=1.5,
+        transcription=None,
+        max_credits=None,
+        force_asr=None,
+        refresh_source=None,
+    ):
+        """Submit once, wait, then read original source; never requests generated analysis."""
+        _bound(timeout_seconds, "timeout_seconds", 0.001, 3600)
+        _bound(poll_interval_seconds, "poll_interval_seconds", 0.25, 30)
+        if on_progress is not None and not callable(on_progress):
+            raise ValueError("on_progress must be callable.")
+        receipt = self.submit_transcript(
+            media,
+            idempotency_key=idempotency_key,
+            cancel_event=cancel_event,
+            transcription=transcription,
+            max_credits=max_credits,
+            force_asr=force_asr,
+            refresh_source=refresh_source,
+            upload_id=upload_id,
+            preferred_caption_languages=preferred_caption_languages,
+        )
+        try:
+            job = self.wait_for_job(
+                receipt["job_id"],
+                timeout_seconds=timeout_seconds,
+                cancel_event=cancel_event,
+                on_progress=on_progress,
+                poll_interval_seconds=poll_interval_seconds,
+            )
+            if job.get("output_mode") != "transcript":
+                raise TldwError(
+                    "Expected a transcript extraction result.", code="INVALID_RESPONSE"
+                )
+            transcript = self.get_saved_transcript(
+                job["transcript_id"], cancel_event=cancel_event
+            )
+            return {"receipt": receipt, "job": job, "transcript": transcript}
         except TldwError as error:
             error.job_id = receipt["job_id"]
             error.receipt = _safe_error_resource(receipt, self.__token)
@@ -692,7 +1181,13 @@ class TldwClient:
                 retry_after,
             )
             return self._comparison(data, resource_id)
-        except (TldwError, ValueError) as error:
+        except ValueError:
+            error = TldwError(
+                "API returned an invalid accepted comparison.", code="INVALID_RESPONSE"
+            )
+            error.idempotency_key = stable_key
+            raise error from None
+        except TldwError as error:
             error.idempotency_key = stable_key
             raise
 

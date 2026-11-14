@@ -37,7 +37,7 @@ class SpendingTests(unittest.TestCase):
                 json.dumps(
                     {
                         "error": {
-                            "code": "MAX_CREDITS_EXCEEDED",
+                            "code": "TRANSCRIPTION_NOT_ALLOWED",
                             "message": "A credit ceiling is required.",
                         }
                     }
@@ -49,7 +49,7 @@ class SpendingTests(unittest.TestCase):
         )
         with self.assertRaises(TldwError) as result:
             client.submit_analysis("source", transcription="if_needed")
-        self.assertEqual(result.exception.code, "MAX_CREDITS_EXCEEDED")
+        self.assertEqual(result.exception.code, "TRANSCRIPTION_NOT_ALLOWED")
         self.assertEqual(len(calls), 1)
 
     def test_explicit_spending_contract_and_invalid_caps_never_submit(self):

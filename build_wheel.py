@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 NAME = "tldw_client"
-VERSION = "0.2.1"
+VERSION = "0.2.5"
 INFO = f"{NAME}-{VERSION}.dist-info"
 METADATA = f"""Metadata-Version: 2.4
 Name: tldw-client

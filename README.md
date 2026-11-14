@@ -1,19 +1,28 @@
 # tldw.sh Python client
 
-A synchronous Python 3.10+ client with no runtime dependencies. Install the
-versioned wheel from your deployment's `/agents` page:
+A synchronous Python 3.10+ client with no runtime dependencies.
 
 ```sh
-python -m pip install /path/to/tldw_client-0.2.1-py3-none-any.whl
+python -m pip install tldw-client
 ```
 
-The intended PyPI distribution name is `tldw-client`, imported as `tldw_client`.
-After the owner publishes the first release, `python -m pip install tldw-client`
-will install the same client. Until then, use your operator's reviewed wheel.
+You can instead install the versioned wheel from your operator's `/agents` page.
+Download it, verify it against the SHA-256 checksum shown on that page, then
+install the verified local file:
+
+```sh
+curl -fsSLo tldw_client-0.2.5-py3-none-any.whl \
+  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.5-py3-none-any.whl' &&
+  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.5-py3-none-any.whl' | shasum -a 256 -c - &&
+  python -m pip install ./tldw_client-0.2.5-py3-none-any.whl
+```
+
+The package is imported as `tldw_client`. Only `tldw-client` on PyPI and your
+operator's verified download are this client; similarly named projects are not.
 
 Use your deployment's API origin and a scoped **tldw API key**, never a model
 provider key. Signup and one-time human verification happen in the web app.
-REST, MCP and plugins share 500 monthly Free caption/text credits, Hobby/Pro
+REST, MCP and plugins share 100 monthly Free caption/text credits, Hobby/Pro
 limits and purchased credits. Polling does not create another analysis or reset your allowance.
 
 ```python
@@ -77,9 +86,9 @@ only the standard library. The PEP 517 backend supports both source distribution
 and wheels with no build dependencies. A standard build frontend can run
 `python -m build` to build the source archive and rebuild its wheel in isolation.
 Run `python -m unittest discover -s tests` from this source directory to check
-transport, polling, billing-safe retries and packaging. Publication preparation
-and registry account requirements are documented in the monorepo's release guide;
-no registry publication is implied by a successful local build.
+transport, polling, billing-safe retries and packaging. Releases are published
+from `main` by the monorepo's manual release workflow through PyPI trusted
+publishing; a successful local build publishes nothing.
 
 ## Standalone development and release preparation
 
@@ -104,15 +113,133 @@ verify deterministic wheel bytes. A model key, running SaaS server, monorepo
 checkout and build-tool installation are unnecessary. CI tests Python 3.10,
 3.12 and 3.14 with read-only repository permissions.
 
-A standard PEP 517 frontend can also build this dependency-free backend, but no
-PyPI release has been made or account ownership established merely by preparing
-this repo. The intended `tldw-client` distribution name remains subject to
-registry ownership and manual publication approval. CI contains no registry
-credentials, automatic publisher or deployment step.
+A standard PEP 517 frontend can also build this dependency-free backend. Releases
+of `tldw-client` are published from the monorepo's `main` branch through PyPI
+trusted publishing; this repository's CI contains no registry credentials,
+automatic publisher or deployment step.
 
 `EXPORT_MANIFEST.json` records canonical-source and export hashes. Synchronize by
 reviewing upstream monorepo changes, re-exporting the package and rerunning the
 commands above; do not silently diverge or overwrite independent edits.
+
+## Extract original source without generated analysis
+
+```python
+receipt = client.submit_transcript(
+    "https://youtu.be/VIDEO_ID",
+    transcription="never",
+    max_credits="30.00",
+    idempotency_key="original-source-001",
+)
+print(receipt["job_id"])  # Persist before waiting.
+job = client.wait_for_job(receipt["job_id"])
+original = client.get_saved_transcript_page(job["transcript_id"], limit=100)
+# Follow original["next_offset"] for more source content.
+```
+
+`submit_transcript` posts to `POST /v1/transcripts` and always returns a durable
+accepted receipt. It never requests a summary or invokes an LLM. Completed
+transcript jobs have `output_mode="transcript"`, a `transcript_id`, and no
+`summary_id`. `extract_transcript(media, ...)` combines submission, polling and
+a full source read, returning `receipt`, `job` and `transcript`; timeout and
+source-permission errors retain the accepted receipt and job ID.
+
+Use `submit_transcript(upload_id=...)` for your parsed subtitle upload.
+`preferred_caption_languages` selects original captions. Spending/ASR controls
+and `refresh_source` are supported, but analysis instructions are not.
+Submission needs `jobs:write`, polling `jobs:read`, and source reads
+`summaries:read`; no account-read scope is needed. New transcript-only jobs
+retain normal credit rates and ASR consent/caps. If you already have a saved
+transcript ID, read it directly: saved-source reads start no processing job,
+invoke no LLM and charge no processing credits.
+
+## Summary and transcript are separate reads
+
+After the job completes, use its `summary_id` to retrieve generated output and
+original source independently. Both calls require `summaries:read` and account
+ownership. Neither starts another analysis, transcription or processing-credit
+charge. The summary response includes transcript metadata, not the full source.
+
+```python
+summary = client.get_summary(job["summary_id"])
+transcript = client.get_transcript(job["summary_id"])
+print(summary["content"]["answer"])
+original_text = (
+    "\n".join(segment["text"] for segment in transcript["segments"])
+    if transcript["timed"]
+    else transcript["text"]
+)
+print(original_text)
+```
+
+REST uses `GET /v1/summaries/{id}` and `GET /v1/summaries/{id}/transcript`.
+MCP uses `get_summary` and paginated `get_transcript`. Timed YouTube/TikTok
+sources expose `segments`; text/X sources expose `blocks` and `text`. X video
+caption blocks retain `start_s` / `end_s` alongside separate untimed post context.
+The saved source stays in its original language when requesting a translated summary.
+
+## Saved transcription inbox
+
+`list_transcripts` returns the latest 50 distinct sources requested by your account,
+including sources saved before an analysis failed. It reads metadata only and does
+not mark anything read. All library, source and read-state calls require `summaries:read`.
+
+```python
+page = client.list_transcripts(limit=50, unread_only=True)
+for item in page["items"]:
+    print(item["id"], item["video"]["title"], item["last_requested_at"])
+    source = client.get_saved_transcript_page(item["id"], offset=0, limit=100)
+    # Follow source["next_offset"] for additional content. Mark only when ready.
+    client.mark_transcript_read(item["id"], read=True)
+```
+
+Pass `cursor=page["next_cursor"]` with the same filters for older entries. `since`
+is inclusive and `until` exclusive, using ISO 8601 timestamps against
+`last_requested_at`. `read=False` marks a source unread again. Reading source
+content through REST/MCP/SDK never implicitly changes its read state.
+
+X posts, X video captions and articles reuse an owned source snapshot for 24 hours.
+Use `submit_analysis(..., refresh_source=True)` to retrieve current source content.
+YouTube/TikTok keep reusing saved transcripts; another brief does not redownload
+audio or repeat transcription when a usable source already exists.
+
+## X video captions and output language
+
+Pass an X post URL directly. Default `scope=auto` detects one attached video and
+analyzes its available captions plus separately labeled post context when the
+deployment enables X video extraction. You do not need a subtitle URL or a
+separate provider key. Use `{"type":"x","url":"YOUR_X_POST_URL","scope":"post"}`
+only for post text alone; thread scope does not recursively analyze its videos.
+
+```python
+receipt = client.submit_analysis(
+    "https://x.com/hamptonism/status/2071631335836225751",
+    instructions="Summarize the spoken content in Spanish. Keep it concise and avoid repetition.",
+    transcription="never",
+    idempotency_key="x-video-spanish-001",
+)
+print({"job_id": receipt["job_id"]})  # Persist before waiting.
+job = client.wait_for_job(
+    receipt["job_id"],
+    on_progress=lambda state: print(
+        {"status": state["status"], "progress": state["progress"]}
+    ),
+)
+result = client.get_summary(job["summary_id"])
+print(result["content"]["answer"])
+```
+
+The response is a durable job receipt. Save its ID before waiting; a timeout does
+not cancel the job. Use a fresh stable key for a different brief or language and
+reuse the exact body/key after an uncertain submission. Without instructions,
+the service produces a concise summary. A translated summary is generated text
+inside the same schema-3 result, not dubbed audio, a translated video or an SRT
+translation; the original captions remain saved separately.
+
+Captioned X videos use actual video duration at 1 credit/minute under normal
+rounding (128.197 seconds = 2.2 credits), not the post's reading time. Missing
+captions fail explicitly with no customer processing charge; X audio
+transcription and visual analysis are not enabled, even with `if_needed`.
 
 ## Credit controls
 
@@ -137,10 +264,9 @@ are not redistributed. Comparison aggregation adds no customer processing credit
 Source minutes round up to 0.1 minute with a 0.5-minute minimum before the rate
 multiplier. Raw text uses estimated reading minutes.
 
-Free includes 500 credits per month for captions/text, Hobby costs USD20/month
+Free includes 100 credits per month for captions/text, Hobby costs USD20/month
 with 1,000 credits, and Pro costs USD99/month with 5,000 credits. Included
 allowance is used first, then purchased credits, which do not expire. Reading
 account usage does not buy credits or change plans.
 
-
-Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `MAX_CREDITS_EXCEEDED` (HTTP 422). Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
+Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `TRANSCRIPTION_NOT_ALLOWED` (HTTP 422); `MAX_CREDITS_EXCEEDED` (HTTP 422) means a supplied ceiling is invalid or below the required charge. Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
