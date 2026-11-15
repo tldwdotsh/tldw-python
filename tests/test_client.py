@@ -383,8 +383,41 @@ class ClientTests(unittest.TestCase):
 
     def test_client_exposes_no_comparison_methods(self):
         client = self.client(lambda *args: response({}))
-        for name in ("compare_tiktoks", "get_comparison", "wait_for_comparison"):
+        for name in ("get_comparison", "wait_for_comparison"):
             self.assertFalse(hasattr(client, name), name)
+
+    def test_only_supported_explicit_media_types_are_admitted_before_post(self):
+        bodies = []
+
+        def transport(method, url, headers, body, timeout):
+            bodies.append(json.loads(body))
+            return response({"job_id": JOB, "job": job()}, 202)
+
+        client = self.client(transport)
+        for media in (
+            42,
+            True,
+            [],
+            {"type": "legacy", "url": "https://youtu.be/dQw4w9WgXcQ"},
+            {"type": ["x"]},
+        ):
+            with self.subTest(media=media), self.assertRaises(ValueError):
+                client.submit_analysis(media)
+        self.assertEqual(bodies, [])
+        for media in (
+            "A complete supplied source",
+            "https://youtu.be/dQw4w9WgXcQ",
+            "https://x.com/example/status/1234567890",
+            {"type": "youtube", "url": "https://youtu.be/dQw4w9WgXcQ"},
+            {
+                "type": "x",
+                "url": "https://x.com/example/status/1234567890",
+                "scope": "article",
+            },
+            {"type": "text", "text": "A complete supplied source"},
+        ):
+            client.submit_analysis(media)
+            self.assertEqual(bodies[-1]["media"], media)
 
     def test_invalid_json_and_oversized_responses_fail_safely(self):
         for body in (b"not-json", b" " * (8 * 1024 * 1024 + 1)):

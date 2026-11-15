@@ -32,12 +32,19 @@ class TranscriptCatalogTests(unittest.TestCase):
                     "read_at": "2026-01-10T12:00:00Z" if data["read"] else None,
                 }
             elif parsed.path.endswith("/metadata"):
-                value = {"id": TRANSCRIPT, "video": {"id": TRANSCRIPT}, "unread": True}
+                value = {
+                    "id": TRANSCRIPT,
+                    "video": {"id": TRANSCRIPT, "platform": "legacy"},
+                    "unread": True,
+                }
             elif parsed.path == "/v1/transcripts":
                 value = {"items": [{"id": TRANSCRIPT}], "next_cursor": "next+cursor/=="}
             else:
                 value = {
                     **CONTENT,
+                    "segments": []
+                    if parsed.path.endswith("/page")
+                    else CONTENT["segments"],
                     "total_segments": 1,
                     "total_blocks": 0,
                     "next_offset": None,
@@ -108,6 +115,7 @@ class TranscriptCatalogTests(unittest.TestCase):
     def test_metadata_lookup_never_fetches_text_or_marks_read(self):
         calls = []
         result = self.client(calls).get_saved_transcript_metadata(TRANSCRIPT)
+        self.assertEqual(result["video"]["platform"], "legacy")
         self.assertEqual(result["id"], TRANSCRIPT)
         self.assertTrue(result["unread"])
         self.assertNotIn("segments", result)

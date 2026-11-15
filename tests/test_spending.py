@@ -11,12 +11,49 @@ JOB = "00000000-0000-4000-8000-000000000101"
 
 
 class SpendingTests(unittest.TestCase):
+    def test_auto_is_explicit_and_omission_stays_omitted(self):
+        bodies = []
+
+        def transport(method, url, headers, body, timeout):
+            bodies.append(json.loads(body))
+            return (
+                202,
+                {},
+                json.dumps(
+                    {
+                        "job_id": JOB,
+                        "job": {"id": JOB, "status": "queued", "progress": 0},
+                    }
+                ).encode(),
+            )
+
+        client = TldwClient(
+            api_url="https://api.example.test", token="fixture", transport=transport
+        )
+        client.submit_analysis("source")
+        client.submit_analysis("source", transcription="auto")
+        self.assertEqual(
+            bodies, [{"media": "source"}, {"media": "source", "transcription": "auto"}]
+        )
+        with self.assertRaises(ValueError):
+            client.submit_analysis("source", transcription="sometimes")
+        self.assertEqual(len(bodies), 2)
+
     def test_cap_omission_is_decided_by_authenticated_server_without_extra_scope(self):
         calls = []
 
         def transport(method, url, headers, body, timeout):
             calls.append((url, json.loads(body)))
-            return 202, {}, json.dumps({"job_id": JOB, "job": {"id": JOB}}).encode()
+            return (
+                202,
+                {},
+                json.dumps(
+                    {
+                        "job_id": JOB,
+                        "job": {"id": JOB, "status": "queued", "progress": 0},
+                    }
+                ).encode(),
+            )
 
         client = TldwClient(
             api_url="https://api.example.test", token="fixture", transport=transport
@@ -57,7 +94,16 @@ class SpendingTests(unittest.TestCase):
 
         def transport(method, url, headers, body, timeout):
             calls.append(json.loads(body))
-            return 202, {}, json.dumps({"job_id": JOB, "job": {"id": JOB}}).encode()
+            return (
+                202,
+                {},
+                json.dumps(
+                    {
+                        "job_id": JOB,
+                        "job": {"id": JOB, "status": "queued", "progress": 0},
+                    }
+                ).encode(),
+            )
 
         client = TldwClient(
             api_url="https://api.example.test", token="fixture", transport=transport

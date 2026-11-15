@@ -1,328 +1,191 @@
 # tldw.sh Python client
 
-A synchronous Python 3.10+ client with no runtime dependencies.
+A dependency-free synchronous client for the asynchronous tldw.sh API. Requires Python 3.10 or newer.
+
+## Install
 
 ```sh
 python -m pip install tldw-client
 ```
 
-You can instead install the versioned wheel from your operator's `/agents` page.
-Download it, verify it against the SHA-256 checksum shown on that page, then
-install the verified local file:
+This checkout prepares the **0.2.11 release candidate**. Use the reviewed,
+versioned download on [Connect your agent](https://tldw.sh/agents) for the updated
+extraction helper, X video search, job listing/cancellation and `auto`
+transcription described here. The registry command above installs the currently
+published version; it does not establish that this candidate has been published.
+Publication is a separate release step.
+Only PyPI `tldw-client` (`import tldw_client`) is this client.
 
-```sh
-curl -fsSLo tldw_client-0.2.8-py3-none-any.whl \
-  'https://YOUR_APP_ORIGIN/downloads/tldw_client-0.2.8-py3-none-any.whl' &&
-  echo 'SHA256_FROM_YOUR_AGENTS_PAGE  tldw_client-0.2.8-py3-none-any.whl' | shasum -a 256 -c - &&
-  python -m pip install ./tldw_client-0.2.8-py3-none-any.whl
-```
+## Authenticate
 
-The package is imported as `tldw_client`. Only `tldw-client` on PyPI and your
-operator's verified download are this client; similarly named projects are not.
-
-Use your deployment's API origin and a scoped **tldw API key**, never a model
-provider key. Signup and one-time human verification happen in the web app.
-Polling does not create another analysis or reset your allowance.
-
-The SDK, the Claude connector, Claude Code and the skill use the same tldw.sh
-account and credits. A new API key does not add free credits. Free includes 100
-monthly caption/text credits and stops at 30 minutes per source.
+Create your account at [tldw.sh](https://tldw.sh) and create a scoped API key in
+Developers. Processing needs `jobs:write`, `jobs:read` and `summaries:read`;
+`account:read` is optional for `get_usage`. Keep keys in the runtime's private
+environment or secret store. The SDK requires an explicit `token` argument
+and never reads a token automatically.
 
 ```python
 import os
-from tldw_client import TldwClient, TldwTimeoutError
+from tldw_client import TldwClient
 
-client = TldwClient(
-    api_url=os.environ["TLDW_API_URL"], token=os.environ["TLDW_API_TOKEN"]
-)
-receipt = client.submit_analysis(
-    "https://youtu.be/VIDEO_ID",
-    instructions="Extract the argument and flag weak evidence.",
-    idempotency_key="my-persisted-request-001",
-)
-print({"job_id": receipt["job_id"]})  # Persist before waiting.
-try:
-    job = client.wait_for_job(receipt["job_id"], timeout_seconds=180)
-    result = client.get_summary(job["summary_id"])
-    print(result["content"])
-except TldwTimeoutError as error:
-    print({"job_id": error.job_id, "status": "resume-polling-later"})
+client = TldwClient(token=os.environ["TLDW_API_TOKEN"])
 ```
 
-`analyze(media, instructions=..., idempotency_key=..., timeout_seconds=180)`
-combines submission, polling and result retrieval, returning a dictionary with
-`receipt`, `job` and `summary`. A failure after acceptance retains `job_id` and
-`receipt`; unknown submission errors retain `idempotency_key`. Reuse that key
-with exactly the same source/instructions after an uncertain network outcome.
+The API defaults to `https://api.tldw.sh`. `TLDW_API_URL` overrides the default,
+and an explicit `api_url` takes precedence. An origin must use HTTPS without
+credentials, query, fragment or path. Anonymous development needs an explicit
+loopback origin and `allow_anonymous=True`.
 
-## Three prompts
+## Analyze media
 
-Each is one link and one job: submit, keep the job ID, wait, then read.
+Analyze YouTube links, public X posts with video or Articles, and supplied text.
 
 ```python
-media = "https://youtu.be/VIDEO_ID"
-# YouTube research brief. Cost: 1 credit per caption minute. A 20-minute talk is 20 credits. Reading the saved result again is free.
-brief = client.submit_analysis(
-    media,
-    instructions="Main argument and three useful takeaways. Cite the minute for each.",
-    idempotency_key="brief-001",
+result = client.analyze(
+    "https://x.com/USER/status/POST_ID",
+    instructions="Explain the main claim and cite the source.",
+    max_credits=30,
+    idempotency_key="analysis-001",
 )
-# Transcript only: "Transcript only. Do not summarize." Use submit_transcript; it sends
-# no instructions. Cost: Same caption rate, no summary. Reading it again is free.
-source = client.submit_transcript(media, idempotency_key="source-001")
-# Claims and evidence. Cost: Same caption rate. Audio only on the platforms account_usage lists for your plan, at 3 credits a minute.
-claims = client.submit_analysis(
-    media,
-    instructions="List practical claims, the evidence, and the caveats. Flag anything supported by one example.",
-    idempotency_key="claims-001",
-)
-job = client.wait_for_job(brief["job_id"])
-print(client.get_summary(job["summary_id"])["content"])
+print(result["job"]["id"], result["summary"]["content"])
 ```
 
-## Limits that stop a job
+Omit `transcription` to let the server decide its account/source policy.
+`"auto"` explicitly selects that policy; `"never"` prevents fresh transcription,
+and `"if_needed"` permits it when the account and platform support it.
+`force_asr=True` requires explicit `transcription="if_needed"`. `max_credits`
+is a positive decimal ceiling with at most two decimal places. The server
+enforces account, funding and duration limits.
 
-Four limits can stop a job. `getUsage` / `get_usage` (`GET /v1/me`) returns them
-as `walls`, each with `active` for your account. A wall error carries
-`error.details.wall` and `error.details.upgrade`, with the next plan and a
-`billing_url` for the account owner, at submit time and on a failed job.
+For durable control, call `submit_analysis`, save its `job_id`, then use
+`wait_for_job` and `get_summary`. X input can be explicit, for example
+`{"type": "x", "url": url, "scope": "auto"}`; `scope="post"` reads post text.
+Generic web-article URLs are unsupported; paste their text instead.
+`refresh_source=True` refreshes an X source without forcing ASR.
 
-- Source length: Free stops at 30 minutes per source; paid plans allow longer
-  sources up to their plan limit.
-- Monthly credits: when included credits run out, new jobs stop until the next
-  billing period or an upgrade. Agents cannot buy credits.
-- Audio: a source without captions needs audio transcription, which runs only on
-  plans and platforms that allow it (`plan.transcription_platforms`).
-- Concurrent jobs: a job over your plan's running-job limit may wait with status
-  `queued_for_slot` and a `queue_position`. It is not terminal; the wait helpers
-  keep polling until it runs. A full queue returns HTTP 429 `RATE_LIMITED`.
-
-Other methods:
-
-- `submit_transcript(media, ...)`, `get_job(job_id)`, `get_summary(summary_id)`, `get_usage()` (`account:read`).
-
-Polling accepts `on_progress(resource)` and `poll_interval_seconds` (default
-1.5, minimum 0.25). It honors larger server polling hints and Retry-After.
-Waits have a finite one-hour maximum; each HTTP operation has a separate
-30-second budget, configurable through `request_timeout_seconds` (maximum 120).
-Pass a `threading.Event` as `cancel_event` to cooperatively stop waiting. The
-current bounded HTTP read can finish before cancellation is observed. Stopping
-a wait never sends a job cancellation; accepted work remains on the server.
-
-`TldwError` exposes `code`, `status`, `request_id`, `retry_after_seconds` and
-durable IDs where known. `TldwJobError` marks failed/canceled work. The SDK never
-follows server-supplied URLs or redirects, ignores environment proxies, validates
-resource UUIDs and limits API responses to 8 MiB. Transient retries preserve the
-same serialized body and idempotency key. Scope, signup and trial denials require
-caller action and are not automatically resubmitted.
-
-Credentials must come from your secret manager or private environment, never a
-prompt, checked-in file or command argument. The client does not print keys.
-Anonymous mode requires explicit loopback development access:
-`TldwClient(api_url="http://localhost:8000", allow_anonymous=True)`. It grants no
-admin access. Production uses HTTPS and a scoped key.
-
-For maintainers, `python build_wheel.py dist` creates the wheel offline using
-only the standard library. The PEP 517 backend supports both source distributions
-and wheels with no build dependencies. A standard build frontend can run
-`python -m build` to build the source archive and rebuild its wheel in isolation.
-Run `python -m unittest discover -s tests` from this source directory to check
-transport, polling, billing-safe retries and packaging. Releases are published
-from `main` by the monorepo's manual release workflow through PyPI trusted
-publishing; a successful local build publishes nothing.
-
-## Standalone development and release preparation
-
-This private repository is an exported snapshot of
-[`tldwdotsh/tldw`](https://github.com/tldwdotsh/tldw), directory
-`packages/agent-client-python`. The monorepo remains canonical until an independent
-release/synchronization workflow is approved and documented. Cloning a private
-repository requires organization access and your normal GitHub credential
-manager or authorized SSH key; never embed a token in the repository URL.
-
-Run these commands from this repository's root with Python 3.10 or newer:
-
-```sh
-python3 -m unittest discover -s tests -v
-python3 build_wheel.py dist
-python3 -c 'from build_wheel import build_sdist; print(build_sdist("dist"))'
-```
-
-All three commands work offline using the standard library. Tests use local HTTP
-fixture servers, validate polling and retries, and rebuild the source archive to
-verify deterministic wheel bytes. A model key, running SaaS server, monorepo
-checkout and build-tool installation are unnecessary. CI tests Python 3.10,
-3.12 and 3.14 with read-only repository permissions.
-
-A standard PEP 517 frontend can also build this dependency-free backend. Releases
-of `tldw-client` are published from the monorepo's `main` branch through PyPI
-trusted publishing; this repository's CI contains no registry credentials,
-automatic publisher or deployment step.
-
-`EXPORT_MANIFEST.json` records canonical-source and export hashes. Synchronize by
-reviewing upstream monorepo changes, re-exporting the package and rerunning the
-commands above; do not silently diverge or overwrite independent edits.
-
-## Extract original source without generated analysis
+## Read the original transcript
 
 ```python
-receipt = client.submit_transcript(
-    "https://youtu.be/VIDEO_ID",
-    transcription="never",
-    max_credits="30.00",
-    idempotency_key="original-source-001",
+original = client.get_transcript(result["job"]["summary_id"])
+extracted = client.extract_transcript(
+    "https://x.com/USER/status/POST_ID",
+    max_credits=30,
+    idempotency_key="extract-001",
 )
-print(receipt["job_id"])  # Persist before waiting.
-job = client.wait_for_job(receipt["job_id"])
-original = client.get_saved_transcript_page(job["transcript_id"], limit=100)
-# Follow original["next_offset"] for more source content.
+print(extracted["transcript"])
 ```
 
-`submit_transcript` posts to `POST /v1/transcripts` and always returns a durable
-accepted receipt. It never requests a summary or invokes an LLM. Completed
-transcript jobs have `output_mode="transcript"`, a `transcript_id`, and no
-`summary_id`. `extract_transcript(media, ...)` combines submission, polling and
-a full source read, returning `receipt`, `job` and `transcript`; timeout and
-source-permission errors retain the accepted receipt and job ID.
+`extract_transcript` submits one analysis, waits, then reads
+`GET /v1/summaries/{summary_id}/transcript`. It generates an analysis and uses
+normal processing credits. Its result is `{"receipt": ..., "job": ...,
+"transcript": ...}`; it does not fetch the generated summary separately.
+Caption language preferences are unavailable and rejected before submission.
+There is no separate customer transcript-only submission endpoint; the helper
+uses the shared analysis flow. Reading an existing transcript starts no processing
+or charge.
 
-`preferred_caption_languages` selects original captions. Spending/ASR controls
-and `refresh_source` are supported, but analysis instructions are not.
-Submission needs `jobs:write`, polling `jobs:read`, and source reads
-`summaries:read`; no account-read scope is needed. New transcript-only jobs
-retain normal credit rates and ASR consent/caps. If you already have a saved
-transcript ID, read it directly: saved-source reads start no processing job,
-invoke no LLM and charge no processing credits.
+Use `list_transcripts(limit=50, cursor=None, since=None, until=None,
+unread_only=False)` for saved metadata. `get_saved_transcript`,
+`get_saved_transcript_metadata` and `get_saved_transcript_page` read existing
+sources. `mark_transcript_read` changes only your read state.
 
-## Summary and transcript are separate reads
+Historical saved-source metadata may use `platform: "legacy"`. It remains
+readable; that label is unavailable for new submissions.
 
-After the job completes, use its `summary_id` to retrieve generated output and
-original source independently. Both calls require `summaries:read` and account
-ownership. Neither starts another analysis, transcription or processing-credit
-charge. The summary response includes transcript metadata, not the full source.
+Pass `offset` or `limit` to `extract_transcript` to read one bounded page after
+processing. `get_transcript_page(summary_id, offset=0, limit=100)` reads later
+pages without another submission; follow `next_offset` until it is `None`.
+
+Saved-source reads require ownership and `summaries:read`; they do not
+automatically mark read. Pages default to 100 items, cap `limit` at 500, and return
+`next_offset` to follow. Timed sources contain segments; untimed sources contain
+blocks. The saved text is normalized captions, recognized speech or supplied
+source, separate from generated output. It does not export original caption-file
+bytes or guarantee word-perfect transcription.
+
+## List, wait and cancel
+
+`wait_job(id, wait_seconds=8)` makes one bounded server wait (0–10 seconds)
+and returns a receipt without submitting work. Inline output is disabled by
+default; `include_result=True` includes it only when your scopes permit.
+`wait_for_job` continues polling until completion or its local deadline.
+
+`stream_job_events(id, timeout_seconds=None, cancel_event=None)` reads one
+authenticated SSE connection and yields `JobEvent` dictionaries with `event`,
+`id` and validated Job `data`. It never reconnects automatically. The deadline
+defaults to `request_timeout_seconds` (30 seconds); an explicit value may extend
+it to 610 seconds for the server's ten-minute stream window. Each event is
+limited to 256 KiB. Use `contextlib.closing(client.stream_job_events(id))` when
+breaking early. Synchronous cancellation is observed between reads; an active
+read remains bounded by the overall stream deadline. Closing stops only this
+local connection.
+
+Custom transports can provide `stream_transport(method, url, headers, body,
+timeout)`, returning `(status, lowercase_headers, binary_body)`. The body must
+support `read(size)` and `close()`; `read1(size)` is preferred when available.
+The opener and reads must honor the single overall timeout and refuse redirects.
 
 ```python
-summary = client.get_summary(job["summary_id"])
-transcript = client.get_transcript(job["summary_id"])
-print(summary["content"]["answer"])
-original_text = (
-    "\n".join(segment["text"] for segment in transcript["segments"])
-    if transcript["timed"]
-    else transcript["text"]
-)
-print(original_text)
+page = client.list_jobs(limit=20)
+if page["next_cursor"]:
+    next_page = client.list_jobs(cursor=page["next_cursor"])
+stopped = client.cancel_job(result["job"]["id"])
 ```
 
-REST uses `GET /v1/summaries/{id}` and `GET /v1/summaries/{id}/transcript`.
-MCP uses `get_summary` and paginated `get_transcript`. Timed YouTube/TikTok
-sources expose `segments`; text/X sources expose `blocks` and `text`. X video
-caption blocks retain `start_s` / `end_s` alongside separate untimed post context.
-The saved source stays in its original language when requesting a translated summary.
+Job limits are 1–100 and cursors are opaque. Listing starts no work.
+Cancellation is an explicit server action requiring job-write access; a
+completion race can return `completed` or `failed` instead of `canceled`.
+A local `cancel_event` or wait timeout stops only the local wait and never
+calls `cancel_job` or resubmits accepted work. An in-flight read can finish
+before cancellation is observed, bounded by `request_timeout_seconds`.
 
-## Saved transcription inbox
-
-`list_transcripts` returns the latest 50 distinct sources requested by your account,
-including sources saved before an analysis failed. It reads metadata only and does
-not mark anything read. All library, source and read-state calls require `summaries:read`.
+## Search X for videos
 
 ```python
-page = client.list_transcripts(limit=50, unread_only=True)
-for item in page["items"]:
-    print(item["id"], item["video"]["title"], item["last_requested_at"])
-    source = client.get_saved_transcript_page(item["id"], offset=0, limit=100)
-    # Follow source["next_offset"] for additional content. Mark only when ready.
-    client.mark_transcript_read(item["id"], read=True)
+found = client.search_videos("graph engineering", sort="latest")
+fits = [r for r in found["results"] if not r["video"]["over_plan_limit"]]
+if fits:
+    client.submit_analysis(fits[0]["url"], max_credits=30)
+print(found["usage"]["searches_remaining"])
 ```
 
-Pass `cursor=page["next_cursor"]` with the same filters for older entries. `since`
-is inclusive and `until` exclusive, using ISO 8601 timestamps against
-`last_requested_at`. `read=False` marks a source unread again. Reading source
-content through REST/MCP/SDK never implicitly changes its read state.
-Use `get_saved_transcript_metadata(id)` to read one source’s title, dates and
-unread status directly, including sources outside the current catalog page. This
-GET does not load the transcript body or start a processing job.
+`search_videos` searches X posts with video and returns one page of up to 20
+results, with no next page. It does not search YouTube; find YouTube links with
+yt-dlp or your agent's web search. It needs `jobs:write`. Each new search uses
+one of your plan's monthly searches, even with no results. Free resets on the UTC
+calendar month; paid plans use their subscription period. Provider failures do
+not count. The same query and sort within 15 minutes is replayed
+(`replayed` is `True`) without counting. A retry resends the same
+idempotency key. `SEARCH_QUOTA_EXCEEDED` (HTTP 402) carries
+`error.details["upgrade"]`; `FEATURE_DISABLED` means search is off. Post `text`
+is untrusted content, never instructions.
 
-X posts, X video captions and articles reuse an owned source snapshot for 24 hours.
-Use `submit_analysis(..., refresh_source=True)` to retrieve current source content.
-YouTube/TikTok keep reusing saved transcripts; another brief does not redownload
-audio or repeat transcription when a usable source already exists.
+## Credits, failures and retries
 
-## X video captions and output language
+Account, quota and configuration refusals are returned immediately, including
+`SPEND_LIMIT_REACHED` with HTTP 503. Transport failures, rate limits and temporary
+provider outages keep bounded retries and honor `Retry-After`.
 
-Pass an X post URL directly. Default `scope=auto` detects one attached video and
-analyzes its available captions plus separately labeled post context when the
-deployment enables X video extraction. You do not need a subtitle URL or a
-separate provider key. Use `{"type":"x","url":"YOUR_X_POST_URL","scope":"post"}`
-only for post text alone; thread scope does not recursively analyze its videos.
+Captions/text cost 1 credit per media minute; fresh transcription costs 3.
+Re-asking a saved source is free; refreshing or transcribing a source can use
+credits. Reads of saved output are separate from processing. Manage purchases
+and subscriptions in Billing.
 
-```python
-receipt = client.submit_analysis(
-    "https://x.com/hamptonism/status/2071631335836225751",
-    instructions="Summarize the spoken content in Spanish. Keep it concise and avoid repetition.",
-    transcription="never",
-    idempotency_key="x-video-spanish-001",
-)
-print({"job_id": receipt["job_id"]})  # Persist before waiting.
-job = client.wait_for_job(
-    receipt["job_id"],
-    on_progress=lambda state: print(
-        {"status": state["status"], "progress": state["progress"]}
-    ),
-)
-result = client.get_summary(job["summary_id"])
-print(result["content"]["answer"])
-```
+Repeat the same media, instructions, options and idempotency key after an
+unknown submission outcome. The client honors `Retry-After` and poll hints,
+bounds HTTP bodies/timeouts, and never follows response URLs or redirects.
+`TldwJobError` represents failed/canceled work. `TldwTimeoutError` retains the
+durable accepted job ID so work can be resumed. Errors preserve the receipt
+while redacting the configured token.
 
-The response is a durable job receipt. Save its ID before waiting; a timeout does
-not cancel the job. Use a fresh stable key for a different brief or language and
-reuse the exact body/key after an uncertain submission. Without instructions,
-the service produces a concise summary. A translated summary is generated text
-inside the same schema-3 result, not dubbed audio, a translated video or an SRT
-translation; the original captions remain saved separately.
+## Agent setup and development
 
-Captioned X videos use actual video duration at 1 credit/minute under normal
-rounding (128.197 seconds = 2.2 credits), not the post's reading time. Missing
-captions fail explicitly with no customer processing charge; X audio
-transcription and visual analysis are not enabled, even with `if_needed`.
+For Claude Code, Cursor, Codex, OpenCode, VS Code/Copilot or Grok Build, use
+[Connect your agent](https://tldw.sh/agents). Browser sign-in is first; the SDK
+is a separate API-key client. It never changes your global client settings.
 
-## Credit controls
-
-Captions, text and existing cached transcripts cost **1 credit per source minute**.
-Fresh audio transcription costs **3 credits per source minute** and requires an
-eligible paid plan or server-confirmed billing exemption, plus explicit `transcription: "if_needed"` (Python:
-`transcription="if_needed"`). The default `never` fails with a clear error when
-new transcription would be necessary. Supplying `forceAsr: true` /
-`force_asr=True` also requires that explicit permission.
-
-Use `maxCredits: "30.00"` in JavaScript or `max_credits="30.00"` in Python to cap
-a job. The server validates affordability before new transcription. The cap is
-positive, at most 1,000,000 credits, and has at most two decimal places. It is
-required for ordinary paid accounts when `transcription` is `if_needed`. Preserve
-these controls in the same idempotent request body on retries. Jobs expose
-`credits.estimated`, `reserved`, `final`, the billing class/rate and real source
-duration; polling does not create another processing charge.
-
-Source minutes round up to 0.1 minute with a 0.5-minute minimum before the rate
-multiplier. Raw text uses estimated reading minutes.
-
-Free includes 100 credits per month for captions/text, Hobby costs USD20/month
-with 1,000 credits, and Pro costs USD99/month with 5,000 credits. Included
-credits reset monthly. Agents cannot buy credits, and reading account usage does
-not change plans.
-
-Server-confirmed billing exemption: the authenticated server decides whether an account is exempt. Exempt accounts may omit a credit ceiling and do not incur customer-credit charges; explicit transcription permission and resource/provider limits still apply. Ordinary paid accounts allowing fresh transcription must supply a ceiling or receive `TRANSCRIPTION_NOT_ALLOWED` (HTTP 422); `MAX_CREDITS_EXCEEDED` (HTTP 422) means a supplied ceiling is invalid or below the required charge. Clients validate supplied values, then pass requests through without fetching extra account scopes or inferring privileges from names, roles, or key prefixes.
-
-## Changes in 0.2.8
-
-Customer subtitle uploads are no longer supported. `submit_transcript()` and
-`extract_transcript()` no longer accept `upload_id` and always need `media`.
-
-## Changes in 0.2.7
-
-API keys can reach only the customer API, so the client now calls only those
-routes. Removed:
-
-- `compare_tiktoks()` (`POST /v1/comparisons`)
-- `get_comparison()` (`GET /v1/comparisons/{id}`)
-- `wait_for_comparison()` (polled `GET /v1/comparisons/{id}`)
-
-`TldwError.comparison_id` remains for compatibility and is always `None`.
+Run `python -m unittest discover -s tests` in this package, or `make agent-test`
+from the source checkout. Tests use fake transports and cover retries,
+extraction, job controls, cancellation safety, read-state helpers and packaging.
+`make client-release` prepares local archives without publishing. See
+[documentation](https://tldw.sh/docs) and [support](https://tldw.sh/support).

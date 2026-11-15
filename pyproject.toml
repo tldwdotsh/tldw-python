@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "tldw-client"
-version = "0.2.8"
+version = "0.2.11"
 description = "Dependency-free tldw.sh asynchronous analysis client"
 requires-python = ">=3.10"
 license = "MIT"
@@ -28,6 +28,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://tldw.sh"
 Documentation = "https://tldw.sh/docs"
+Support = "https://tldw.sh/support"
 Source = "https://github.com/tldwdotsh/tldw-python"
 Issues = "https://github.com/tldwdotsh/tldw-python/issues"
 

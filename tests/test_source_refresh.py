@@ -15,7 +15,10 @@ class SourceRefreshTests(unittest.TestCase):
         def transport(method, url, headers, body, timeout):
             if method == "POST":
                 calls.append(json.loads(body))
-                value = {"job_id": JOB, "job": {"id": JOB}}
+                value = {
+                    "job_id": JOB,
+                    "job": {"id": JOB, "status": "queued", "progress": 0},
+                }
                 return 202, {}, json.dumps(value).encode()
             if "/v1/jobs/" in url:
                 value = {

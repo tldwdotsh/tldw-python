@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from build_wheel import build_sdist, build_wheel
+from build_wheel import VERSION, build_sdist, build_wheel
 
 
 class PackagingTests(unittest.TestCase):
@@ -43,9 +43,9 @@ class PackagingTests(unittest.TestCase):
             with tarfile.open(path, "r:gz") as archive:
                 names = archive.getnames()
                 self.assertTrue(
-                    all(name.startswith("tldw_client-0.2.8/") for name in names)
+                    all(name.startswith(f"tldw_client-{VERSION}/") for name in names)
                 )
-                self.assertIn("tldw_client-0.2.8/PKG-INFO", names)
+                self.assertIn(f"tldw_client-{VERSION}/PKG-INFO", names)
                 self.assertFalse(
                     any("__pycache__" in name or ".env" in name for name in names)
                 )
@@ -56,7 +56,7 @@ class PackagingTests(unittest.TestCase):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_bytes(archive.extractfile(member).read())
             spec = importlib.util.spec_from_file_location(
-                "rebuilt", root / "tldw_client-0.2.8/build_wheel.py"
+                "rebuilt", root / f"tldw_client-{VERSION}/build_wheel.py"
             )
             rebuilt = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(rebuilt)
@@ -70,16 +70,24 @@ class PackagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / build_wheel(directory)
             with zipfile.ZipFile(path) as archive:
-                metadata = archive.read("tldw_client-0.2.8.dist-info/METADATA").decode()
+                metadata = archive.read(
+                    f"tldw_client-{VERSION}.dist-info/METADATA"
+                ).decode()
                 self.assertIn("License-Expression: MIT", metadata)
-                self.assertIn(
-                    "Project-URL: Source, https://github.com/tldwdotsh/tldw-python",
-                    metadata,
-                )
                 self.assertIn("License-File: LICENSE", metadata)
                 self.assertIn(
                     "Project-URL: Documentation, https://tldw.sh/docs", metadata
                 )
+                self.assertIn("Project-URL: Support, https://tldw.sh/support", metadata)
+                self.assertIn(
+                    "Project-URL: Source, https://github.com/tldwdotsh/tldw-python",
+                    metadata,
+                )
+                self.assertIn(
+                    "Project-URL: Issues, https://github.com/tldwdotsh/tldw-python/issues",
+                    metadata,
+                )
+                self.assertNotIn("https://github.com/tldwdotsh/tldw\n", metadata)
 
     def test_offline_wheel_is_deterministic_and_only_contains_public_package_files(
         self,
@@ -97,7 +105,9 @@ class PackagingTests(unittest.TestCase):
                 records = list(
                     csv.reader(
                         io.StringIO(
-                            archive.read("tldw_client-0.2.8.dist-info/RECORD").decode()
+                            archive.read(
+                                f"tldw_client-{VERSION}.dist-info/RECORD"
+                            ).decode()
                         )
                     )
                 )
