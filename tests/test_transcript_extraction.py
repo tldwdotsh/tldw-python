@@ -70,7 +70,7 @@ class TranscriptExtractionTests(unittest.TestCase):
         self.assertEqual(json.loads(calls[0][3]), {"media": "Original source"})
         self.assertEqual(calls[0][2]["Idempotency-Key"], "extract-once")
 
-    def test_extraction_passes_explicit_spending_controls_through_analysis(self):
+    def test_extraction_forwards_legacy_audio_fields_and_caps_through_analysis(self):
         calls = []
 
         def transport(method, url, headers, body, timeout):
@@ -83,7 +83,7 @@ class TranscriptExtractionTests(unittest.TestCase):
         client = self.client(transport)
         client.extract_transcript(
             "source",
-            transcription="if_needed",
+            transcription="never",
             max_credits="9.00",
             force_asr=True,
             refresh_source=True,
@@ -93,7 +93,7 @@ class TranscriptExtractionTests(unittest.TestCase):
             [
                 {
                     "media": "source",
-                    "transcription": "if_needed",
+                    "transcription": "never",
                     "max_credits": "9.00",
                     "force_asr": True,
                     "refresh_source": True,
@@ -108,7 +108,7 @@ class TranscriptExtractionTests(unittest.TestCase):
         for media, options in [
             (None, {}),
             ("source", {"preferred_caption_languages": ["invalid tag"]}),
-            ("source", {"force_asr": True}),
+            ("source", {"force_asr": "true"}),
         ]:
             with self.subTest(options=options), self.assertRaises(ValueError):
                 client.extract_transcript(media, **options)

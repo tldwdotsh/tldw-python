@@ -85,7 +85,7 @@ __all__ = [
     "TldwTimeoutError",
 ]
 # Must match pyproject.toml and build_wheel.py; the wheel build checks this.
-__version__ = "0.2.12"
+__version__ = "0.2.13"
 # Production API origin, used when neither api_url nor TLDW_API_URL is set.
 DEFAULT_API_URL = "https://api.tldw.sh"
 # Largest response body the client accepts.
@@ -112,6 +112,7 @@ _NON_RETRYABLE_CODES = {
     "MAX_CREDITS_EXCEEDED",
     "DURATION_LIMIT_EXCEEDED",
     "TRANSCRIPTION_NOT_ALLOWED",
+    "CAPTIONS_UNAVAILABLE",
     "TRANSCRIPTION_NOT_CONFIGURED",
     "FEATURE_DISABLED",
     "SOURCE_NOT_CONFIGURED",
@@ -125,8 +126,9 @@ def _spending_options(transcription=None, max_credits=None, force_asr=None):
     Omitted values are left out so the server applies its current policy.
     ``max_credits`` (a positive decimal up to 1,000,000 with at most two
     decimal places) is sent as a two-decimal string, for example ``"30.00"``,
-    so no float rounding reaches the server. ``force_asr`` requires
-    ``transcription="if_needed"``. Raises ValueError for invalid values.
+    so no float rounding reaches the server. Processing uses captions or saved
+    source only. Legacy ``transcription`` and ``force_asr`` values are accepted
+    but ignored by the server. Raises ValueError for invalid values.
     """
     if transcription is not None and transcription not in (
         "auto",
@@ -136,8 +138,6 @@ def _spending_options(transcription=None, max_credits=None, force_asr=None):
         raise ValueError("transcription must be auto, never or if_needed.")
     if force_asr is not None and not isinstance(force_asr, bool):
         raise ValueError("force_asr must be a boolean.")
-    if force_asr and transcription != "if_needed":
-        raise ValueError("force_asr requires explicit transcription=if_needed.")
     result = {}
     if transcription is not None:
         result["transcription"] = transcription
@@ -1066,7 +1066,9 @@ class TldwClient:
         included when the deployment supports it. Explicit scope=post reads
         only post text. Use instructions for focus or a requested output language
         (for example, 'Summarize the spoken content in Spanish.'). Omit
-        transcription to let the server choose its current account/source policy.
+        transcription and force_asr: these legacy fields are accepted but
+        ignored. Processing uses captions or saved source only; fresh audio
+        transcription is unavailable.
         Reuse the exact media, instructions and idempotency_key
         after an unknown submission outcome.
         X post and X Article sources may reuse a saved snapshot for 24 hours. Set
@@ -1084,12 +1086,11 @@ class TldwClient:
                 request with the same key returns the original job
                 (``replayed`` is true) instead of creating another.
             cancel_event: Optional ``threading.Event``.
-            transcription: ``"auto"``, ``"never"`` or ``"if_needed"``; omit to
-                let the server decide.
+            transcription: Deprecated compatibility field, accepted but ignored.
+                Processing uses captions or saved source only.
             max_credits: Credit ceiling for this job: a positive decimal up to
                 1,000,000 with at most two decimal places.
-            force_asr: Transcribe audio even when captions exist; requires
-                ``transcription="if_needed"`` and an eligible account.
+            force_asr: Deprecated compatibility field, accepted but ignored.
             refresh_source: Fetch current X post or Article content instead of
                 reusing a snapshot saved within 24 hours.
 
