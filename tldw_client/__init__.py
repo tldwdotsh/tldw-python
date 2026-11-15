@@ -85,7 +85,7 @@ __all__ = [
     "TldwTimeoutError",
 ]
 # Must match pyproject.toml and build_wheel.py; the wheel build checks this.
-__version__ = "0.2.11"
+__version__ = "0.2.12"
 # Production API origin, used when neither api_url nor TLDW_API_URL is set.
 DEFAULT_API_URL = "https://api.tldw.sh"
 # Largest response body the client accepts.

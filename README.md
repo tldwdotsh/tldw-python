@@ -8,7 +8,7 @@ A dependency-free synchronous client for the asynchronous tldw.sh API. Requires 
 python -m pip install tldw-client
 ```
 
-This documentation describes **0.2.11**: saved transcript extraction, X video
+This documentation describes **0.2.12**: saved transcript extraction, X video
 search, job listing/cancellation and server-selected audio fallback. Reviewed,
 checksum-pinned downloads and current registry availability are listed on
 [Connect your agent](https://tldw.sh/agents).
