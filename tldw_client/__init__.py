@@ -85,7 +85,10 @@ __all__ = [
     "TldwTimeoutError",
 ]
 # Must match pyproject.toml and build_wheel.py; the wheel build checks this.
-__version__ = "0.2.13"
+__version__ = "0.2.14"
+_PUBLIC_READ_PATHS = frozenset(
+    {"/v1/public/config", "/v1/public/security", "/v1/billing/catalog"}
+)
 # Production API origin, used when neither api_url nor TLDW_API_URL is set.
 DEFAULT_API_URL = "https://api.tldw.sh"
 # Largest response body the client accepts.
@@ -667,8 +670,11 @@ class TldwClient:
             query, fragment or path; plain HTTP is allowed only for
             localhost, 127.0.0.1 and ::1.
         token: Scoped API key, sent as a Bearer token. Required unless
-            ``allow_anonymous`` is set for a loopback origin. The client never
+            ``public_only`` is True or ``allow_anonymous`` is set for loopback. The client never
             reads a token from the environment by itself.
+        public_only: Explicit no-key client limited to get_public_config,
+            get_public_security and get_billing_catalog. Rejects tokens and
+            private operations, including job event streams. Defaults to False.
         allow_anonymous: Allow requests without a token; only effective on a
             loopback (local development) origin.
         request_timeout_seconds: Budget for one API call, retries included
@@ -680,6 +686,7 @@ class TldwClient:
             ``_http_stream_transport`` for the ownership/timeout contract.
 
     Raises:
+        TypeError: When public_only is not a boolean.
         ValueError: For an invalid origin, token or timeout, or a missing
             token.
 
@@ -706,6 +713,7 @@ class TldwClient:
         api_url=None,
         token=None,
         allow_anonymous=False,
+        public_only=False,
         request_timeout_seconds=30,
         transport=None,
         stream_transport=None,
@@ -734,6 +742,10 @@ class TldwClient:
             raise ValueError(
                 "api_url must be an HTTPS origin without credentials, query, fragment or path; HTTP is allowed only on loopback."
             )
+        if not isinstance(public_only, bool):
+            raise TypeError("public_only must be a boolean.")
+        if public_only and token is not None:
+            raise ValueError("public_only clients do not accept a token.")
         if token is not None and (
             not isinstance(token, str)
             or not token
@@ -742,7 +754,7 @@ class TldwClient:
             raise ValueError(
                 "token must be nonempty printable ASCII without whitespace."
             )
-        if not token and not (allow_anonymous and loopback):
+        if not token and not public_only and not (allow_anonymous and loopback):
             raise ValueError(
                 "A tldw API token is required. Anonymous access requires explicit loopback development mode."
             )
@@ -754,6 +766,7 @@ class TldwClient:
         # Name-mangled so the token is not an ordinary public attribute; it is
         # never placed in errors.
         self.__token = token
+        self.__public_only = public_only
         self.request_timeout_seconds = _bound(
             request_timeout_seconds, "request_timeout_seconds", 0.001, 120
         )
@@ -764,6 +777,15 @@ class TldwClient:
         # (kind, id) -> (not_before, interval): polling guidance remembered
         # from submissions, used by the first wait on that resource.
         self._poll_hints = {}
+
+    def _require_operation(self, method, path, body=None):
+        if self.__public_only and (
+            method != "GET" or path not in _PUBLIC_READ_PATHS or body is not None
+        ):
+            raise TldwError(
+                "This public-only client cannot call private API operations. Create an authenticated client for account data or processing.",
+                code="PUBLIC_READ_ONLY",
+            )
 
     def _check_canceled(self, cancel_event):
         if cancel_event is not None and cancel_event.is_set():
@@ -849,6 +871,7 @@ class TldwClient:
         Raises:
             TldwError, TldwTimeoutError or TldwCanceledError.
         """
+        self._require_operation(method, path, body)
         deadline = (
             self._clock() + self.request_timeout_seconds
             if deadline is None
@@ -1307,6 +1330,7 @@ class TldwClient:
         example with contextlib.closing); this never cancels the server job.
         """
         job_id = _identifier(job_id)
+        self._require_operation("GET", f"/v1/jobs/{job_id}/events")
         timeout = (
             self.request_timeout_seconds
             if timeout_seconds is None
@@ -1677,6 +1701,18 @@ class TldwClient:
         if data.get("id") != summary_id or not isinstance(data.get("content"), dict):
             raise TldwError("API returned an invalid summary.", code="INVALID_RESPONSE")
         return data
+
+    def get_public_config(self, *, cancel_event=None):
+        """Read current public configuration/features; no processing or account access."""
+        return self._request("GET", "/v1/public/config", cancel_event=cancel_event)[0]
+
+    def get_public_security(self, *, cancel_event=None):
+        """Read public enrollment, human-verification and current Free allowance policy."""
+        return self._request("GET", "/v1/public/security", cancel_event=cancel_event)[0]
+
+    def get_billing_catalog(self, *, cancel_event=None):
+        """Read public plan/credit prices and offers; never starts checkout or processing."""
+        return self._request("GET", "/v1/billing/catalog", cancel_event=cancel_event)[0]
 
     def get_usage(self, *, cancel_event=None):
         """Read the account's plan, credit usage and limits (GET /v1/me).

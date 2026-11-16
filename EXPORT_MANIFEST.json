@@ -1,28 +1,29 @@
 {
   "automatic_registry_publication": false,
   "canonical_directory": "packages/agent-client-python",
-  "canonical_source_commit": "29ede98f35122a58988a4cd8ee42219faa5a5088",
-  "canonical_source_snapshot_sha256": "f3b048d74f9b2dda8e69379bdcb4bece273fa49ac050af0cf9cebd993f28cbb6",
+  "canonical_source_commit": "30a0ffe8a3106d31d46499be768672d90064251f",
+  "canonical_source_snapshot_sha256": "3f81506fa6ed8d109396fe077913707df86297ff64a609bc321454aa95cb5438",
   "export_files": {
     ".gitignore": "427249912cc347340b2cff8e7a6c6daae0077b16be21d8c7306752386c4a0186",
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
-    "README.md": "7710209d5388bccfc963c806d04ca21950f7a2bbd4f23d89972b9ecb65b65d5f",
-    "build_wheel.py": "f18a217412cef0f927070b1771e7e2136eb2dea2a728db85e8c9a9b7aedc9bea",
-    "pyproject.toml": "383964e0ba47ba7779dc735d3c841385df3319c5eabd21fda2eeb053b4bfd9a7",
+    "README.md": "2376344602bf859b709b7111d38f24f4b23886e175bfa901b3b98f329af37d9a",
+    "build_wheel.py": "11825a793e985562186c0af746601074d0de12c8a205da1a27418dea62b052d4",
+    "pyproject.toml": "6259e4c47e8f8d13ec0c2fa1f901e00c8e57028cd886d60f0e6fc1848d6b2514",
     "tests/test_client.py": "bc90b90b84b68a9cc0e3616304e624aa51daf799f4ec76d13fc190c0b655c5bc",
     "tests/test_job_events.py": "39a56bd2f155e3ce1d90ba24c7c2568939a0107ba5fd92c41879a2b3e6a33b82",
     "tests/test_jobs.py": "7c793b9a94d21e43521bbee13d7ffa08183687bb1e52185c4b60499fc9f5242c",
     "tests/test_packaging.py": "dbd5198adde0467c6d8da14174744bc0d8435c3f81aec1413809d14e85cec211",
+    "tests/test_public_reads.py": "803ff10d2921fc5c04487d534c22dfafbc1241eb864af6bce1f34499eaede184",
     "tests/test_search.py": "057c2bfc694e289f63f3faf1d5a656b8ce922e14b75557a26d930c885d9e8ba8",
     "tests/test_source_refresh.py": "a6251c7ba7905f0ac3026bbad0791af357fe005ba781cccd78e4581df58ac494",
     "tests/test_spending.py": "c5ac0e4b798f89dcffe77001fb39780fdfd6bd48df9c6354dc28fafa28e3a258",
     "tests/test_transcript_catalog.py": "7a767ad1f443e36ac8706e193d0fb06fe0023ef433e5e85aa5274314ffa6c91d",
     "tests/test_transcript_extraction.py": "0ae6f28e74cc477ce4385b0f51bd16242ecf29b0ed8e02cec692436083343812",
     "tests/test_transport.py": "5890f7c0177953e33cac33fb2fc22013bcc5de15a417a93addce49cc4de416b8",
-    "tldw_client/__init__.py": "118935f4dd2e8ce408697ece9262b5b7fa415073caab19e808d8273d2d96276c"
+    "tldw_client/__init__.py": "288ca78f599d8eb0081d516484d476dd48bca9bbcfac3e267ebd8f48a0d257b0"
   },
-  "export_snapshot_sha256": "9a59e6859387d0932e7d044c081a8eba18a05a6c52cf73888c34ee26865aeb2c",
+  "export_snapshot_sha256": "c60cfe72584d9d99ba18b9445d5476d0e799f6096ef8b0b278328eff0226ce21",
   "name": "tldw-python",
   "schema_version": 1,
-  "version": "0.2.13"
+  "version": "0.2.14"
 }
