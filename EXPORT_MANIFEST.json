@@ -1,7 +1,7 @@
 {
   "automatic_registry_publication": false,
   "canonical_directory": "packages/agent-client-python",
-  "canonical_source_commit": "99a7b50e0cdccca921300e1971e59626b957c09a",
+  "canonical_source_commit": "29ede98f35122a58988a4cd8ee42219faa5a5088",
   "canonical_source_snapshot_sha256": "f3b048d74f9b2dda8e69379bdcb4bece273fa49ac050af0cf9cebd993f28cbb6",
   "export_files": {
     ".gitignore": "427249912cc347340b2cff8e7a6c6daae0077b16be21d8c7306752386c4a0186",
