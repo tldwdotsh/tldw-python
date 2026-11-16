@@ -1,14 +1,14 @@
 {
   "automatic_registry_publication": false,
   "canonical_directory": "packages/agent-client-python",
-  "canonical_source_commit": "6624f5e934c897619b36e1a0687b12c835b39fa4",
-  "canonical_source_snapshot_sha256": "3f81506fa6ed8d109396fe077913707df86297ff64a609bc321454aa95cb5438",
+  "canonical_source_commit": "33eb79b9972e12b37483a22a5e052e7c2871899c",
+  "canonical_source_snapshot_sha256": "c0d0d1d50cf090bb3aafdbd409775fc09546ea400c202b8fa9cf37f484e0d70e",
   "export_files": {
     ".gitignore": "427249912cc347340b2cff8e7a6c6daae0077b16be21d8c7306752386c4a0186",
     "LICENSE": "66c5c642314847f06544018eb8224259f5eabf17ed2a5c04c4f28e7f1f684821",
-    "README.md": "2376344602bf859b709b7111d38f24f4b23886e175bfa901b3b98f329af37d9a",
-    "build_wheel.py": "11825a793e985562186c0af746601074d0de12c8a205da1a27418dea62b052d4",
-    "pyproject.toml": "6259e4c47e8f8d13ec0c2fa1f901e00c8e57028cd886d60f0e6fc1848d6b2514",
+    "README.md": "530cc8ac0468a2e426fc8700ba7f5863da033279aea4c4e823fabeac7fce08f1",
+    "build_wheel.py": "2365e94cdbc8f72b2e978232d97a4b62d0c24d3f97c301d89e2ad89cd7b778ed",
+    "pyproject.toml": "487d7631ea601f884c24e369bb56b0f6a72dffeddffdc198aa3e62a9bdacda65",
     "tests/test_client.py": "bc90b90b84b68a9cc0e3616304e624aa51daf799f4ec76d13fc190c0b655c5bc",
     "tests/test_job_events.py": "39a56bd2f155e3ce1d90ba24c7c2568939a0107ba5fd92c41879a2b3e6a33b82",
     "tests/test_jobs.py": "7c793b9a94d21e43521bbee13d7ffa08183687bb1e52185c4b60499fc9f5242c",
@@ -20,10 +20,10 @@
     "tests/test_transcript_catalog.py": "7a767ad1f443e36ac8706e193d0fb06fe0023ef433e5e85aa5274314ffa6c91d",
     "tests/test_transcript_extraction.py": "0ae6f28e74cc477ce4385b0f51bd16242ecf29b0ed8e02cec692436083343812",
     "tests/test_transport.py": "5890f7c0177953e33cac33fb2fc22013bcc5de15a417a93addce49cc4de416b8",
-    "tldw_client/__init__.py": "288ca78f599d8eb0081d516484d476dd48bca9bbcfac3e267ebd8f48a0d257b0"
+    "tldw_client/__init__.py": "7e1795c191a843d1ff49970e9ee8e6e26500b7e092ba3c7d8d148b99077b086d"
   },
-  "export_snapshot_sha256": "c60cfe72584d9d99ba18b9445d5476d0e799f6096ef8b0b278328eff0226ce21",
+  "export_snapshot_sha256": "6353ebd04c6e282c179a2d113e663cc91419ee4ef9bfc0628ca3cd04c6810ed6",
   "name": "tldw-python",
   "schema_version": 1,
-  "version": "0.2.14"
+  "version": "0.2.15"
 }

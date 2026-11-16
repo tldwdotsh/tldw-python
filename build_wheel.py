@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent
 NAME = "tldw_client"
 # Must equal pyproject.toml's version and tldw_client.__version__; see
 # _check_version.
-VERSION = "0.2.14"
+VERSION = "0.2.15"
 INFO = f"{NAME}-{VERSION}.dist-info"
 # Core metadata for the wheel (and the sdist's PKG-INFO). README.md is
 # appended as the long description. Keep these fields in sync with

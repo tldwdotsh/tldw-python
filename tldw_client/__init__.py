@@ -85,7 +85,7 @@ __all__ = [
     "TldwTimeoutError",
 ]
 # Must match pyproject.toml and build_wheel.py; the wheel build checks this.
-__version__ = "0.2.14"
+__version__ = "0.2.15"
 _PUBLIC_READ_PATHS = frozenset(
     {"/v1/public/config", "/v1/public/security", "/v1/billing/catalog"}
 )
@@ -129,9 +129,10 @@ def _spending_options(transcription=None, max_credits=None, force_asr=None):
     Omitted values are left out so the server applies its current policy.
     ``max_credits`` (a positive decimal up to 1,000,000 with at most two
     decimal places) is sent as a two-decimal string, for example ``"30.00"``,
-    so no float rounding reaches the server. Processing uses captions or saved
-    source only. Legacy ``transcription`` and ``force_asr`` values are accepted
-    but ignored by the server. Raises ValueError for invalid values.
+    so no float rounding reaches the server. Processing reuses saved source or
+    captions, then automatic audio when enabled for the platform. Legacy
+    ``transcription`` and ``force_asr`` values are ignored and cannot disable or
+    force audio. Raises ValueError for invalid values.
     """
     if transcription is not None and transcription not in (
         "auto",
@@ -1090,8 +1091,9 @@ class TldwClient:
         only post text. Use instructions for focus or a requested output language
         (for example, 'Summarize the spoken content in Spanish.'). Omit
         transcription and force_asr: these legacy fields are accepted but
-        ignored. Processing uses captions or saved source only; fresh audio
-        transcription is unavailable.
+        ignored and cannot disable or force audio. The server reuses saved source or
+        captions, then automatically transcribes audio when enabled for the platform
+        on every plan at 1 credit per minute.
         Reuse the exact media, instructions and idempotency_key
         after an unknown submission outcome.
         X post and X Article sources may reuse a saved snapshot for 24 hours. Set
@@ -1110,7 +1112,7 @@ class TldwClient:
                 (``replayed`` is true) instead of creating another.
             cancel_event: Optional ``threading.Event``.
             transcription: Deprecated compatibility field, accepted but ignored.
-                Processing uses captions or saved source only.
+                The server chooses saved source, captions or enabled automatic audio.
             max_credits: Credit ceiling for this job: a positive decimal up to
                 1,000,000 with at most two decimal places.
             force_asr: Deprecated compatibility field, accepted but ignored.
